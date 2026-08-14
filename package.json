@@ -1,0 +1,23 @@
+{
+  "name": "backlink-indexer",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "frontend",
+    "sdk/javascript"
+  ],
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm run start --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "typecheck": "npm run lint --prefix frontend",
+    "test": "npm run test --prefix frontend"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.1"
+  },
+  "dependencies": {
+    "lucide-react": "^1.28.0"
+  }
+}

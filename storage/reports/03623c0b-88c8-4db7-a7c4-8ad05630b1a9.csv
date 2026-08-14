@@ -1,0 +1,10 @@
+section,key,value
+meta,report_type,executive_summary
+meta,generated_at,2026-07-27T09:31:41.678256+00:00
+meta,disclaimer,"Analytics reflect observed operational data only (backlinks, validations, pipeline jobs, feeds, WebSub, IndexNow for owned URLs). They do not guarantee search-engine indexing."
+metrics,active_backlinks,1
+metrics,average_health_score,65.66666666666667
+metrics,pipeline_success_rate,0.5
+metrics,websub_success_rate,1.0
+metrics,indexnow_success_rate,
+metrics,validation_runs,3

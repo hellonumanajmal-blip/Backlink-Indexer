@@ -1,0 +1,22 @@
+"""Placeholder revision for the customer_portal module.
+
+The module has no implemented models, so this revision creates no schema. It
+exists to keep the Alembic revision chain contiguous between 0001 and 0014.
+
+Revision ID: 0005
+Revises: 0004
+"""
+from typing import Sequence, Union
+
+revision: str = "0005"
+down_revision: Union[str, None] = "0004"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    pass
+
+
+def downgrade() -> None:
+    pass

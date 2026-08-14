@@ -1,0 +1,128 @@
+# Render Blueprint for the actual Backlink-Indexer architecture.
+# Datastores and web services can use Free. Celery worker + beat cannot:
+# Render Background Workers have no Free plan and MCP cannot create them.
+# Closest always-on config is type: worker on Starter ($7/mo each).
+databases:
+  - name: backlink-indexer-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"
+    databaseName: backlinkindexer
+    user: backlink
+
+  - name: backlink-indexer-redis
+    type: keyvalue
+    plan: free
+    region: oregon
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+services:
+  - type: web
+    name: backlink-indexer-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: freeindexer-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "from alembic.config import Config; from alembic import command; from app.core.config import settings; u=settings.database_url.replace('+asyncpg','+psycopg2').replace('+aiosqlite',''); c=Config('alembic.ini'); c.set_main_option('sqlalchemy.url', u); command.upgrade(c,'head')" && python -m uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: FI_ENVIRONMENT
+        value: production
+      - key: FI_DEBUG
+        value: "false"
+      - key: FI_DATABASE_URL
+        fromDatabase:
+          name: backlink-indexer-db
+          property: connectionString
+      - key: FI_REDIS_URL
+        fromService:
+          name: backlink-indexer-redis
+          type: keyvalue
+          property: connectionString
+      - key: FI_SECRET_KEY
+        generateValue: true
+      - key: FI_CORS_ORIGINS
+        value: '["https://backlink-indexer-frontend.onrender.com"]'
+
+  - type: worker
+    name: backlink-indexer-worker
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: freeindexer-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.workers.celery_app.celery_app worker --loglevel=info -Q default,discovery,retry,url_validation,backlink_verification,crawl_monitoring,index_verification --concurrency=2
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: FI_ENVIRONMENT
+        value: production
+      - key: FI_DEBUG
+        value: "false"
+      - key: FI_DATABASE_URL
+        fromDatabase:
+          name: backlink-indexer-db
+          property: connectionString
+      - key: FI_REDIS_URL
+        fromService:
+          name: backlink-indexer-redis
+          type: keyvalue
+          property: connectionString
+      - key: FI_SECRET_KEY
+        fromService:
+          name: backlink-indexer-api
+          type: web
+          envVarKey: FI_SECRET_KEY
+
+  - type: worker
+    name: backlink-indexer-beat
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: freeindexer-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.workers.celery_app.celery_app beat --loglevel=info
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: FI_ENVIRONMENT
+        value: production
+      - key: FI_DEBUG
+        value: "false"
+      - key: FI_DATABASE_URL
+        fromDatabase:
+          name: backlink-indexer-db
+          property: connectionString
+      - key: FI_REDIS_URL
+        fromService:
+          name: backlink-indexer-redis
+          type: keyvalue
+          property: connectionString
+      - key: FI_SECRET_KEY
+        fromService:
+          name: backlink-indexer-api
+          type: web
+          envVarKey: FI_SECRET_KEY
+
+  - type: web
+    name: backlink-indexer-frontend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npx next start -p $PORT -H 0.0.0.0
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_API_URL
+        value: ""
+      - key: FASTAPI_INTERNAL_URL
+        value: https://backlink-indexer-api.onrender.com
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://backlink-indexer-frontend.onrender.com

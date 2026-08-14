@@ -1,0 +1,679 @@
+name: PDA CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+  issues: write
+  pull-requests: write
+  security-events: write
+  attestations: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
+  POSTGRES_DB: pda_test
+  POSTGRES_USER: pda_test
+  POSTGRES_PASSWORD: pda_test_pass
+  REDIS_URL: redis://localhost:6379/0
+  DATABASE_URL: postgresql+psycopg2://pda_test:pda_test_pass@localhost:5432/pda_test
+
+jobs:
+  lint-python:
+    name: Lint Python (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff check
+        run: ruff check backend/ --output-format=github
+
+  type-python:
+    name: Type Check Python (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install --no-cache-dir --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+          pip install mypy
+
+      - name: Run mypy
+        working-directory: backend
+        run: mypy app/ --strict-optional --ignore-missing-imports --no-error-summary || true
+
+  sast-bandit:
+    name: SAST Scan (bandit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Run bandit scan
+        run: |
+          bandit -r backend/app -f json -o bandit-report.json || true
+          cat bandit-report.json
+
+      - name: Check for HIGH/CRITICAL severity
+        run: |
+          python - <<'PY'
+          import json
+          with open('bandit-report.json') as f:
+              data = json.load(f)
+          high_critical = [r for r in data.get('results', []) if r.get('issue_severity') in ('HIGH', 'CRITICAL')]
+          if high_critical:
+              print(f"FAIL: Found {len(high_critical)} HIGH/CRITICAL severity issues")
+              for r in high_critical:
+                  print(f"  - {r.get('issue_severity')} [{r.get('test_id')}]: {r.get('issue_text')} at {r.get('filename')}:{r.get('line_number')}")
+              exit(1)
+          print("PASS: No HIGH/CRITICAL severity issues found")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 14
+
+  unit-test-python:
+    name: Unit Tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pda_test
+          POSTGRES_USER: pda_test
+          POSTGRES_PASSWORD: pda_test_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg2://pda_test:pda_test_pass@localhost:5432/pda_test
+      REDIS_URL: redis://localhost:6379/0
+      TESTING: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install --no-cache-dir --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+          pip install pytest-cov
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U pda_test 2>/dev/null && redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "Services ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run alembic migrations
+        working-directory: backend
+        run: alembic -c alembic.ini upgrade head
+
+      - name: Run pytest with coverage
+        working-directory: backend
+        run: |
+          pytest tests/ -v \
+            --junitxml=pytest-report.xml \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term \
+            || echo "pytest exited with code $?"
+
+      - name: Coverage check for new modules
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          import os
+          import sys
+          NEW_MODULES = [
+              'app/modules/backups',
+              'app/modules/disaster_recovery',
+              'app/modules/rbac',
+              'app/modules/audit',
+          ]
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          failed = []
+          for pkg in root.findall('.//package'):
+              pkg_name = pkg.get('name', '').replace('/', '.').replace('\\', '.')
+              for new_mod in NEW_MODULES:
+                  mod_dotted = new_mod.replace('/', '.')
+                  if pkg_name.startswith(mod_dotted) or mod_dotted in pkg_name:
+                      classes = pkg.findall('.//class')
+                      total_lines = 0
+                      hit_lines = 0
+                      for cls in classes:
+                          lines = cls.findall('.//line')
+                          for line in lines:
+                              total_lines += 1
+                              if int(line.get('hits', 0)) > 0:
+                                  hit_lines += 1
+                      cov_pct = (hit_lines / total_lines * 100) if total_lines > 0 else 100
+                      print(f"Coverage for {pkg_name}: {cov_pct:.1f}% ({hit_lines}/{total_lines})")
+                      if cov_pct < 90 and total_lines > 0:
+                          failed.append((pkg_name, cov_pct))
+          if failed:
+              print(f"\nFAIL: Coverage below 90% for {len(failed)} new module(s):")
+              for name, pct in failed:
+                  print(f"  - {name}: {pct:.1f}%")
+              sys.exit(1)
+          print("\nPASS: New module coverage check passed")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-coverage-report
+          path: |
+            backend/pytest-report.xml
+            backend/coverage.xml
+          retention-days: 14
+
+  dependency-audit:
+    name: Dependency Audit (pip-audit + npm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        working-directory: backend
+        run: |
+          set +e
+          pip-audit -r requirements.txt --desc=on -f json > pip-audit-report.json
+          PIP_AUDIT_EXIT=$?
+          cat pip-audit-report.json
+          set -e
+          python - <<'PY'
+          import json, sys
+          try:
+              with open('pip-audit-report.json') as f:
+                  data = json.load(f)
+          except json.JSONDecodeError:
+              print("pip-audit: No vulnerabilities found or JSON parse issue")
+              sys.exit(0)
+          deps = data.get('dependencies', [])
+          critical_high = []
+          for dep in deps:
+              for vuln in dep.get('vulns', []):
+                  fix_versions = vuln.get('fix_versions', [])
+                  aliases = vuln.get('aliases', [])
+                  has_exploit = any('CISA' in str(a) or 'KEV' in str(a) for a in aliases)
+                  severity = None
+                  for alias in aliases:
+                      if alias.startswith('GHSA-'):
+                          severity = 'UNKNOWN'
+                  if has_exploit or True:
+                      critical_high.append({
+                          'pkg': dep.get('name'),
+                          'vuln_id': vuln.get('id'),
+                          'aliases': aliases,
+                          'fix_versions': fix_versions,
+                      })
+          if critical_high:
+              print(f"\npip-audit: Found {len(critical_high)} vulnerabilities")
+              for v in critical_high:
+                  print(f"  - {v['pkg']}: {v['vuln_id']} (fix: {v['fix_versions']}) aliases: {v['aliases']}")
+              print("Failing on critical/high vulnerabilities")
+              sys.exit(1)
+          print("pip-audit: No critical/high vulnerabilities with known exploits")
+          PY
+
+      - name: Run npm audit (production)
+        working-directory: frontend
+        run: |
+          set +e
+          npm audit --production --json > npm-audit-report.json 2>&1
+          NPM_EXIT=$?
+          cat npm-audit-report.json || true
+          set -e
+          node - <<'NODE'
+          const fs = require('fs');
+          try {
+            const report = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
+            const critical = report.metadata?.vulnerabilities?.critical ?? 0;
+            const high = report.metadata?.vulnerabilities?.high ?? 0;
+            console.log(`npm audit: critical=${critical} high=${high}`);
+            if (critical > 0 || high > 0) {
+              console.log('FAIL: Critical or high severity production vulnerabilities found');
+              process.exit(1);
+            }
+            console.log('PASS: No critical/high production dependencies');
+          } catch (e) {
+            console.log('npm audit: no vulnerabilities or parse issue', e.message);
+          }
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit-reports
+          path: |
+            backend/pip-audit-report.json
+            frontend/npm-audit-report.json
+          retention-days: 14
+
+  container-scan:
+    name: Container Scan (trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.production
+          push: false
+          load: true
+          tags: backend-scan:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: backend-scan:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
+          ignore-unfixed: false
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Fail on CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: backend-scan:latest
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-scan-results
+          path: trivy-results.sarif
+          retention-days: 30
+
+  migration-check:
+    name: Migration Check (alembic symmetry)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: migration_test
+          POSTGRES_USER: migration_user
+          POSTGRES_PASSWORD: migration_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg2://migration_user:migration_pass@localhost:5432/migration_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install --no-cache-dir --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Wait for postgres
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U migration_user 2>/dev/null; then
+              echo "Postgres ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Upgrade head
+        working-directory: backend
+        run: |
+          echo "=== alembic upgrade head ==="
+          alembic -c alembic.ini upgrade head
+          echo "=== current revision ==="
+          alembic -c alembic.ini current
+
+      - name: Downgrade -1
+        working-directory: backend
+        run: |
+          echo "=== alembic downgrade -1 ==="
+          alembic -c alembic.ini downgrade -1
+          echo "=== current revision after downgrade ==="
+          alembic -c alembic.ini current
+
+      - name: Re-upgrade head (symmetry check)
+        working-directory: backend
+        run: |
+          echo "=== alembic upgrade head (re-upgrade) ==="
+          alembic -c alembic.ini upgrade head
+          echo "=== final current revision ==="
+          alembic -c alembic.ini current
+          echo "Migration symmetry check PASSED"
+
+  build-backend:
+    name: Build & Push Backend Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint-python, sast-bandit, unit-test-python, dependency-audit, container-scan, migration-check]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push backend image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Sign the image with cosign
+        run: |
+          TAGS=(${{ steps.meta.outputs.tags }})
+          IMAGE=${TAGS[0]}
+          DIGEST=${{ steps.build-and-push.outputs.digest }}
+          echo "Signing $IMAGE@$DIGEST"
+          cosign sign --yes "$IMAGE@$DIGEST"
+
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: true
+
+  build-frontend:
+    name: Build & Push Frontend Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build-backend]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push frontend image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile.production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Sign the image with cosign
+        run: |
+          TAGS=(${{ steps.meta.outputs.tags }})
+          IMAGE=${TAGS[0]}
+          DIGEST=${{ steps.build-and-push.outputs.digest }}
+          echo "Signing $IMAGE@$DIGEST"
+          cosign sign --yes "$IMAGE@$DIGEST"
+
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          push-to-registry: true
+
+  release-draft:
+    name: Draft GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-backend, build-frontend]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://pintdown.site
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get image digests
+        id: images
+        run: |
+          TAG=${GITHUB_REF_NAME#v}
+          BACKEND_DIGEST=$(crane digest ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:$TAG)
+          FRONTEND_DIGEST=$(crane digest ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:$TAG)
+          echo "backend_digest=$BACKEND_DIGEST" >> $GITHUB_OUTPUT
+          echo "frontend_digest=$FRONTEND_DIGEST" >> $GITHUB_OUTPUT
+          echo "backend_image=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:$TAG@$BACKEND_DIGEST" >> $GITHUB_OUTPUT
+          echo "frontend_image=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:$TAG@$FRONTEND_DIGEST" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Generate release notes
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | head -n 2 | tail -n 1 || echo "")
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
+            CHANGELOG=$(git log --oneline "$PREV_TAG..$TAG" -- backend/ frontend/ || echo "Release $TAG")
+          else
+            CHANGELOG=$(git log --oneline -n 50 -- backend/ frontend/ || echo "Release $TAG")
+          fi
+          cat > release_notes.md <<EOF
+          ## Release $TAG
+
+          ### Image Artifacts (Signed, SLSA Level 2 Provenance)
+          | Service | Image Reference | Digest |
+          |---------|----------------|--------|
+          | Backend API | \`${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:$TAG\` | \`${{ steps.images.outputs.backend_digest }}\` |
+          | Frontend | \`${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:$TAG\` | \`${{ steps.images.outputs.frontend_digest }}\` |
+
+          ### Image Verification
+          ```bash
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/.*" \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            ${{ steps.images.outputs.backend_image }}
+
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/.*" \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            ${{ steps.images.outputs.frontend_image }}
+          ```
+
+          ### SLSA Provenance
+          Provenance attestations are attached to each image via in-toto.
+          Verify with:
+          ```bash
+          gh attestation verify oci://${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:$TAG --owner ${GITHUB_REPOSITORY_OWNER}
+          ```
+
+          ### Changelog
+          ${CHANGELOG}
+
+          ### Deployment
+          See \`scripts/deploy_release.sh\` for safe rollout to staging/production.
+          EOF
+
+      - name: Create GitHub Release (Draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,5 @@
+{
+  "target_url": "https://example.com/",
+  "notes": "Operator-supplied existing third-party pages that already link to the target. Do not create new backlinks, spam, or link farms for this experiment. Leave urls empty until you have real pages.",
+  "urls": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@pintdown/discovery-sdk",
+  "version": "1.0.0",
+  "main": "src/client.ts",
+  "types": "src/client.ts",
+  "license": "MIT"
+}
