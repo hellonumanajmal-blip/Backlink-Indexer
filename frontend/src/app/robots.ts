@@ -16,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
         "/atom.xml",
         "/sitemap.xml",
       ],
-      disallow: ["/internal/"],
+      disallow: ["/internal/", "/dashboard/", "/login", "/signup"],
     },
     sitemap: `${SITE}/sitemap.xml`,
   };
