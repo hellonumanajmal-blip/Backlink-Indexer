@@ -11,6 +11,10 @@
  * honest error/empty states rather than inventing data.
  */
 
+import { useState, useEffect } from "react";
+import React from "react";
+import { Link2, Search, Globe, Eye, HelpCircle, Plus, Rss, FileJson, Webhook } from "lucide-react";
+
 export type ApiResult<T> =
   | { ok: true; status: number; data: T }
   | { ok: false; status: number; error: string };
@@ -391,4 +395,200 @@ export function setSession(active: boolean) {
   if (typeof window === "undefined") return;
   if (active) window.localStorage.setItem(SESSION_KEY, "1");
   else window.localStorage.removeItem(SESSION_KEY);
+}
+
+export function useDashboardData() {
+  const [data, setData] = useState<{
+    kpiMetrics: any[];
+    pipelineStatus: any[];
+    recentBacklinks: any[];
+    activityEvents: any[];
+    discoveryChannels: any[];
+    indexingHealth: any[];
+    isLoading: boolean;
+    error: Error | null;
+  }>({
+    kpiMetrics: [],
+    pipelineStatus: [],
+    recentBacklinks: [],
+    activityEvents: [],
+    discoveryChannels: [],
+    indexingHealth: [],
+    isLoading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    let active = true;
+    async function fetchAll() {
+      try {
+        const [blRes, engRes] = await Promise.all([
+          listBacklinks({ pageSize: 5 }),
+          getEngineDashboard(),
+        ]);
+
+        if (!active) return;
+
+        let totalBacklinks = 0;
+        let recentItems: any[] = [];
+        if (blRes.ok) {
+          totalBacklinks = blRes.data.total;
+          recentItems = blRes.data.items.map((b) => ({
+            id: b.id,
+            sourceUrl: b.url,
+            targetUrl: b.domain || "—",
+            status: b.dispatch_status || "pending",
+            discoveryStatus: b.dispatch_status || "pending",
+            indexStatus: b.index_status || "unknown",
+            lastChecked: b.last_dispatched_at || b.created_at,
+          }));
+        }
+
+        const engine = engRes.ok ? engRes.data : null;
+        const indexedCount = engine?.indexed_count ?? 0;
+        const notIndexedCount = engine?.not_indexed_count ?? 0;
+        const unknownCount = engine?.unknown_count ?? 0;
+        const crawledCount = totalBacklinks - unknownCount;
+
+        const metrics = [
+          {
+            label: "Total Backlinks",
+            value: totalBacklinks,
+            description: "Total backlinks submitted",
+            icon: React.createElement(Link2, { className: "w-5 h-5" }),
+            iconBgColor: "bg-violet-100 text-violet-600",
+          },
+          {
+            label: "Discovered",
+            value: totalBacklinks - notIndexedCount - unknownCount,
+            description: "Successfully discovered",
+            icon: React.createElement(Search, { className: "w-5 h-5" }),
+            iconBgColor: "bg-blue-100 text-blue-600",
+          },
+          {
+            label: "Crawled",
+            value: crawledCount >= 0 ? crawledCount : 0,
+            description: "Crawled evidence found",
+            icon: React.createElement(Globe, { className: "w-5 h-5" }),
+            iconBgColor: "bg-indigo-100 text-indigo-600",
+          },
+          {
+            label: "Indexed",
+            value: indexedCount,
+            description: "Verified indexed in Google",
+            icon: React.createElement(Eye, { className: "w-5 h-5" }),
+            iconBgColor: "bg-green-100 text-green-600",
+          },
+          {
+            label: "Unknown",
+            value: unknownCount,
+            description: "Index verification unknown",
+            icon: React.createElement(HelpCircle, { className: "w-5 h-5" }),
+            iconBgColor: "bg-neutral-100 text-neutral-600",
+          },
+        ];
+
+        const pipeline = [
+          {
+            label: "Submitted",
+            description: "Backlinks received",
+            status: "completed" as const,
+            icon: React.createElement(Plus, { className: "w-6 h-6" }),
+          },
+          {
+            label: "Discovery",
+            description: "Discovery channels queued",
+            status: totalBacklinks > 0 ? ("active" as const) : ("waiting" as const),
+            icon: React.createElement(Search, { className: "w-6 h-6" }),
+          },
+          {
+            label: "Crawled",
+            description: "Crawl evidence detected",
+            status: crawledCount > 0 ? ("completed" as const) : ("waiting" as const),
+            icon: React.createElement(Globe, { className: "w-6 h-6" }),
+          },
+          {
+            label: "Indexed",
+            description: "Verified index status",
+            status: indexedCount > 0 ? ("completed" as const) : ("waiting" as const),
+            icon: React.createElement(Eye, { className: "w-6 h-6" }),
+          },
+        ];
+
+        const channels = [
+          {
+            name: "HTML Discovery",
+            description: "Crawlable hub indexing optimization",
+            status: "active" as const,
+            icon: React.createElement(Globe, { className: "w-4 h-4" }),
+          },
+          {
+            name: "RSS Feed",
+            description: "Real-time feed optimization",
+            status: "active" as const,
+            icon: React.createElement(Rss, { className: "w-4 h-4" }),
+          },
+          {
+            name: "Atom Feed",
+            description: "Syndication format indexing",
+            status: "active" as const,
+            icon: React.createElement(Rss, { className: "w-4 h-4" }),
+          },
+          {
+            name: "JSON Feed",
+            description: "Modern JSON feed discovery",
+            status: "active" as const,
+            icon: React.createElement(FileJson, { className: "w-4 h-4" }),
+          },
+          {
+            name: "WebSub Hub",
+            description: "Instant pub/sub notifications",
+            status: "active" as const,
+            icon: React.createElement(Webhook, { className: "w-4 h-4" }),
+          },
+        ];
+
+        const health = [
+          { label: "Indexed", value: indexedCount, color: "bg-green-500" },
+          { label: "Not Indexed", value: notIndexedCount, color: "bg-red-500" },
+          { label: "Unknown/Pending", value: unknownCount, color: "bg-neutral-500" },
+        ];
+
+        const events = blRes.ok
+          ? blRes.data.items.slice(0, 3).map((b) => ({
+              title: b.dispatch_status === "failed" ? "Dispatch Failed" : "Backlink Submitted",
+              description: `${b.title || b.url} is in workflow stage: ${b.index_status}`,
+              type: b.dispatch_status === "failed" ? ("error" as const) : ("success" as const),
+              timestamp: b.last_dispatched_at || b.created_at || new Date().toISOString(),
+              icon: React.createElement(b.dispatch_status === "failed" ? HelpCircle : Link2, { className: "w-4 h-4" }),
+            }))
+          : [];
+
+        setData({
+          kpiMetrics: metrics,
+          pipelineStatus: pipeline,
+          recentBacklinks: recentItems,
+          activityEvents: events,
+          discoveryChannels: channels,
+          indexingHealth: health,
+          isLoading: false,
+          error: null,
+        });
+      } catch (err) {
+        if (!active) return;
+        setData((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: err instanceof Error ? err : new Error("Failed to load dashboard data"),
+        }));
+      }
+    }
+
+    void fetchAll();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return data;
 }

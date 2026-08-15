@@ -13,7 +13,7 @@ import {
   ProgressBar,
   Pill,
 } from "@/components/ui";
-import { listJobs, getIntelligence, EngineJob } from "@/lib/dashboard";
+import { listJobs, getIntelligence, EngineJob } from '@/lib/dashboard';
 
 export default function IntelligencePage() {
   const [jobs, setJobs] = useState<EngineJob[] | null>(null);

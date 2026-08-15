@@ -13,7 +13,7 @@ import {
   Pill,
   PipelinePill,
 } from "@/components/ui";
-import { listJobs, EngineJob } from "@/lib/dashboard";
+import { listJobs, EngineJob } from '@/lib/dashboard';
 
 function HttpPill({ status }: { status?: number | null }) {
   if (status == null) return <Pill tone="neutral">—</Pill>;

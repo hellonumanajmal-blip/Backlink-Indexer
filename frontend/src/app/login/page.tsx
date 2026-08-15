@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Link2, Lock, Mail, ArrowLeft } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui";
-import { login, setSession } from "@/lib/dashboard";
+import { login, setSession } from '@/lib/dashboard';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,7 +26,7 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } else {
-      setError(res.status === 0 ? "Network error — the API could not be reached." : res.error || "Login failed.");
+      setError(res.error || "Network error — the API could not be reached.");
     }
   }
 

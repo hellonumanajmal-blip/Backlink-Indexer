@@ -21,7 +21,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/components/ui";
-import { hasSession, me, setSession } from "@/lib/dashboard";
+import { hasSession, me, setSession } from '@/lib/dashboard';
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },

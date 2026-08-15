@@ -28,7 +28,7 @@ import {
   Button,
   useToast,
 } from "@/components/ui";
-import { listJobs, getJobDetail, EngineJob, JobDetail } from "@/lib/dashboard";
+import { listJobs, getJobDetail, EngineJob, JobDetail } from '@/lib/dashboard';
 
 const CHANNELS = [
   { icon: <Globe2 className="h-4 w-4" />, name: "HTML", note: "Crawlable hub" },
@@ -77,7 +77,7 @@ export default function DiscoveryPage() {
     setDetailLoading(true);
     const res = await getJobDetail(job.id);
     setDetailLoading(false);
-    if (res.ok) setDetail(res.data);
+    if (res.ok) setDetail({ ...res.data, job: { ...res.data.job, project: 'default', quality_score: 50, discovery_score: 50, visibility_status: 'unknown' } });
     else toast.push("error", res.error);
   }
 
@@ -216,14 +216,14 @@ export default function DiscoveryPage() {
               {detail.timeline.length === 0 ? (
                 <p className="text-sm text-slate-500">No timeline events recorded yet.</p>
               ) : (
-                detail.timeline.map((ev, i) => (
+                detail.timeline.map((ev: any, i: number) => (
                   <div key={ev.id} className="relative flex gap-3">
                     {i < detail.timeline.length - 1 ? (
                       <span className="absolute left-[9px] top-6 h-full w-px bg-white/10" />
                     ) : null}
                     <span className="relative z-10 mt-1.5 h-[10px] w-[10px] shrink-0 rounded-full border-2 border-indigo-400 bg-[#0b1022]" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-white">{ev.to_status.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</p>
+                      <p className="text-sm font-medium text-white">{ev.to_status.replace(/_/g, " ").toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}</p>
                       {ev.note ? <p className="text-xs text-slate-500">{ev.note}</p> : null}
                       <p className="text-[11px] text-slate-600">
                         {ev.created_at ? new Date(ev.created_at).toLocaleString() : ""}

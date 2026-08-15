@@ -13,7 +13,7 @@ import {
   Pill,
   ProgressBar,
 } from "@/components/ui";
-import { getExperiments, ExperimentReport } from "@/lib/dashboard";
+import { getExperiments, ExperimentReport } from '@/lib/dashboard';
 
 const GROUP_ORDER = ["A", "B", "C", "D"];
 
@@ -25,7 +25,25 @@ export default function ExperimentsPage() {
     const res = await getExperiments();
     if (res.ok) setReport(res.data);
     else {
-      setReport({});
+      setReport({
+        groups: {},
+        totals: {
+          submitted_in_study: 0,
+          eligible: 0,
+          baseline_already_indexed_excluded: 0,
+          verified_indexed: 0,
+          unknown: 0,
+          not_indexed: 0,
+        },
+        funnel: {
+          discovery_signal_accepted: 0,
+          target_url_discovered: 0,
+          target_url_crawled: 0,
+          target_url_indexed: 0,
+          note: "",
+        },
+        disclaimer: "",
+      });
       if (res.status === 401) setAuthError("Experiment data requires backend authentication.");
     }
   }, []);
