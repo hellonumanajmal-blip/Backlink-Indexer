@@ -85,6 +85,7 @@ function normalizeStatus(status: string | null | undefined): string {
   const s = status.trim().toLowerCase();
   if (s === "indexed") return "indexed";
   if (s === "pinged") return "pinged";
+  if (s === "unknown") return "unknown";
   if (
     s === "not_indexed" ||
     s === "lost" ||

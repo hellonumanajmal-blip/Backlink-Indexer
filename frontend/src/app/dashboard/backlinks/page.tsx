@@ -67,7 +67,7 @@ export default function BacklinksPage() {
   const load = useCallback(async () => {
     const res = await listBacklinks({ q: q || undefined, status: status || undefined, page, pageSize });
     if (res.ok) {
-      setItems(res.data.items.map(item => ({ ...item, source_url: item.url, crawlability_band: 'medium', canonical_status: 'canonical', googlebot_visited: false, last_checked_at: item.last_dispatched_at || item.created_at })));
+      setItems(res.data.items);
       setTotal(res.data.total);
     } else {
       setItems([]);
