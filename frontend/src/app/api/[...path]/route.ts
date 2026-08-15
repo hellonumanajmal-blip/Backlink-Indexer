@@ -13,13 +13,44 @@ import {
 // activate a next.config.ts rewrite that would bypass this handler entirely.
 const FASTAPI_URL = process.env.FASTAPI_INTERNAL_URL || "http://127.0.0.1:8000";
 
+function getSessionToken(req: NextRequest): string | null {
+  const cookie = req.headers.get("cookie") || "";
+  const match = cookie.match(/session=([^;]+)/);
+  if (!match) return null;
+  return decodeURIComponent(match[1]);
+}
+
+function extractApiError(data: unknown, fallback: string): string {
+  if (data && typeof data === "object") {
+    const body = data as { detail?: unknown; error?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (typeof body.error === "string") return body.error;
+  }
+  return fallback;
+}
+
+function setSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set("session", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+}
+
+function clearSessionCookie(response: NextResponse) {
+  response.cookies.set("session", "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+}
+
 async function fetchFastAPI(
   path: string,
   options: {
     method?: string;
     body?: any;
     headers?: Record<string, string>;
-  } = {}
+    auth?: string;
+  } = {},
+  incomingRequest?: NextRequest
 ) {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const targetUrl = `${FASTAPI_URL.replace(/\/$/, "")}${cleanPath}`;
@@ -28,6 +59,8 @@ async function fetchFastAPI(
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
+  const authHeader = options.auth || (incomingRequest ? getSessionToken(incomingRequest) || undefined : undefined);
+  if (authHeader) headers["Authorization"] = `Bearer ${authHeader}`;
 
   const init: RequestInit = {
     method: options.method || "GET",
@@ -71,12 +104,45 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   const method = req.method;
   const url = new URL(req.url);
 
-  // Auth me & login
-  if (pathStr === "auth/me") {
-    return NextResponse.json({ username: "admin", status: "active", role: "admin" });
+  // Real authentication — forwarded to the backend. The backend owns the
+  // users table and signs the JWT with FI_SECRET_KEY; the proxy only stores
+  // the token in an httpOnly cookie and forwards it as a bearer credential.
+  if (pathStr === "auth/signup" && method === "POST") {
+    const res = await fetchFastAPI("/api/auth/signup", { method: "POST", body: await req.text() });
+    if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return NextResponse.json({ error: extractApiError(data, "Signup failed.") }, { status: res.status });
+    }
+    const response = NextResponse.json(data, { status: 201 });
+    if (data && typeof data === "object" && (data as { access_token?: string }).access_token) {
+      setSessionCookie(response, (data as { access_token: string }).access_token);
+    }
+    return response;
   }
-  if (pathStr === "auth/login") {
-    return NextResponse.json({ status: "ok", message: "Logged in as admin" });
+  if (pathStr === "auth/login" && method === "POST") {
+    const res = await fetchFastAPI("/api/auth/login", { method: "POST", body: await req.text() });
+    if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return NextResponse.json({ error: extractApiError(data, "Invalid email or password.") }, { status: res.status });
+    }
+    const response = NextResponse.json(data, { status: 200 });
+    if (data && typeof data === "object" && (data as { access_token?: string }).access_token) {
+      setSessionCookie(response, (data as { access_token: string }).access_token);
+    }
+    return response;
+  }
+  if (pathStr === "auth/me") {
+    const res = await fetchFastAPI("/api/auth/me", { method: "GET" }, req);
+    if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
+    const data = await res.json().catch(() => null);
+    return NextResponse.json(data, { status: res.status });
+  }
+  if (pathStr === "auth/logout") {
+    const response = NextResponse.json({ status: "ok" });
+    clearSessionCookie(response);
+    return response;
   }
 
   // Integrations status, health and managed execution endpoints

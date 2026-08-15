@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { User, Lock, KeyRound, Bell, SlidersHorizontal, Copy, Check } from "lucide-react";
 import { Card, Button, Input, Label, Select, useToast } from "@/components/ui";
+import { useAuth } from "@/lib/auth";
 
 function SectionCard({
   id,
@@ -20,10 +21,10 @@ function SectionCard({
   return (
     <Card id={id} className="scroll-mt-24 p-6">
       <div className="mb-5 flex items-start gap-3">
-        <div className="rounded-lg border border-indigo-400/30 bg-indigo-500/10 p-2 text-indigo-300">{icon}</div>
+        <div className="rounded-lg border border-border bg-surface-2 p-2 text-primary">{icon}</div>
         <div>
-          <h3 className="text-sm font-semibold text-white">{title}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{description}</p>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="mt-0.5 text-xs text-muted">{description}</p>
         </div>
       </div>
       {children}
@@ -33,9 +34,10 @@ function SectionCard({
 
 export default function SettingsPage() {
   const toast = useToast();
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
 
   async function copyToken() {
     try {
@@ -50,16 +52,16 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <SectionCard
-        id="account"
+        id="profile"
         icon={<User className="h-4 w-4" />}
         title="Profile"
-        description="Your account information. Saving is enabled when the backend auth API is implemented."
+        description="Your account information from the real authenticated session."
       >
         <form
           className="grid gap-4 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            toast.push("success", "Profile updated locally. Persistence arrives with the auth backend.");
+            toast.push("info", "Profile editing is not enabled yet — the backend update endpoint does not exist.");
           }}
         >
           <div className="space-y-1.5">
@@ -70,8 +72,22 @@ export default function SettingsPage() {
             <Label htmlFor="profile-email">Email</Label>
             <Input id="profile-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-role">Role</Label>
+            <Input id="profile-role" readOnly value={(user as any)?.role || "user"} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-created">Member since</Label>
+            <Input
+              id="profile-created"
+              readOnly
+              value={(user as any)?.created_at ? new Date((user as any).created_at).toLocaleDateString() : "—"}
+            />
+          </div>
           <div className="sm:col-span-2">
-            <Button type="submit" size="sm">Save changes</Button>
+            <Button type="submit" size="sm" variant="secondary">
+              Save changes
+            </Button>
           </div>
         </form>
       </SectionCard>
@@ -80,7 +96,7 @@ export default function SettingsPage() {
         id="security"
         icon={<Lock className="h-4 w-4" />}
         title="Security"
-        description="Password and session settings. The backend auth module is not implemented yet — the UI is ready for it."
+        description="Password and session settings. Password changes require a backend endpoint that does not exist yet."
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -92,7 +108,9 @@ export default function SettingsPage() {
             <Input id="new-pw" type="password" autoComplete="new-password" placeholder="At least 8 characters" disabled />
           </div>
         </div>
-        <p className="mt-3 text-xs text-slate-600">Password changes require the backend auth API. Fields are disabled until then.</p>
+        <p className="mt-3 text-xs text-muted">
+          Your session is a JWT stored in an httpOnly cookie. Sign out from the sidebar to end it.
+        </p>
       </SectionCard>
 
       <SectionCard
@@ -108,7 +126,7 @@ export default function SettingsPage() {
             {copied ? "Copied" : "Copy"}
           </Button>
         </div>
-        <p className="mt-3 text-xs text-slate-600">
+        <p className="mt-3 text-xs text-muted">
           Placeholder only — real API keys are issued once the backend exposes an API-key
           endpoint. No fake token is stored or issued.
         </p>
@@ -126,11 +144,11 @@ export default function SettingsPage() {
             { label: "Pipeline failures", desc: "When a job fails validation or discovery" },
             { label: "Weekly digest", desc: "A summary of discovery and verification activity" },
           ].map((n) => (
-            <label key={n.label} className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-              <input type="checkbox" className="mt-1 h-4 w-4 accent-indigo-500" defaultChecked={false} />
+            <label key={n.label} className="flex items-start gap-3 rounded-lg border border-border bg-surface-2/40 p-3">
+              <input type="checkbox" className="mt-1 h-4 w-4 rounded border-border bg-surface-2 accent-primary" defaultChecked={false} />
               <span>
-                <span className="block text-sm font-medium text-white">{n.label}</span>
-                <span className="block text-xs text-slate-500">{n.desc}</span>
+                <span className="block text-sm font-medium text-foreground">{n.label}</span>
+                <span className="block text-xs text-muted">{n.desc}</span>
               </span>
             </label>
           ))}

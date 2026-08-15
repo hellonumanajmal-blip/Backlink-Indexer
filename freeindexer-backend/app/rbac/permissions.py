@@ -15,6 +15,12 @@ from app.auth import Principal, get_current_principal
 # role -> permissions ("*" = all)
 ROLE_PERMISSIONS: dict[str, Set[str]] = {
     "admin": {"*"},
+    "user": {
+        "indexing:read",
+        "indexing:write",
+        "knowledge:read",
+        "observability:read",
+    },
     "integrations:manager": {
         "integrations:read",
         "integrations:write",

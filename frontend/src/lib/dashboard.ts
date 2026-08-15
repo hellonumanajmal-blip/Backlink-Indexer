@@ -229,19 +229,28 @@ export function getExperiments() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Auth                                                                */
+/* Auth (real backend sessions — see lib/auth.ts)                     */
 /* ------------------------------------------------------------------ */
 
+export type LoginResponse = {
+  access_token?: string;
+  token?: string;
+  user?: { id?: string; name?: string; email?: string; role?: string };
+};
+
 export async function login(email: string, password: string) {
-  return post<{ status?: string; message?: string }>("/api/auth/login", {
-    username: email,
+  return post<LoginResponse>("/api/auth/login", {
     email,
     password,
   });
 }
 
 export async function me() {
-  return request<{ username?: string; status?: string; role?: string }>("/api/auth/me");
+  return request<{ id?: string; name?: string; email?: string; role?: string }>("/api/auth/me");
+}
+
+export async function logout() {
+  return request<void>("/api/auth/logout", { method: "POST" });
 }
 
 /* ------------------------------------------------------------------ */
@@ -381,20 +390,17 @@ export function getFeatured() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Session helpers (existing proxy auth is a local stub)               */
+/* Session helpers (real session lives in the httpOnly cookie)          */
 /* ------------------------------------------------------------------ */
 
-const SESSION_KEY = "bie.session";
-
+/** @deprecated localStorage is not an authentication mechanism. */
 export function hasSession(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(SESSION_KEY) === "1";
+  return false;
 }
 
-export function setSession(active: boolean) {
-  if (typeof window === "undefined") return;
-  if (active) window.localStorage.setItem(SESSION_KEY, "1");
-  else window.localStorage.removeItem(SESSION_KEY);
+/** @deprecated localStorage is not an authentication mechanism. */
+export function setSession(_active: boolean) {
+  /* no-op: sessions live in the httpOnly cookie set by the API proxy */
 }
 
 export function useDashboardData() {

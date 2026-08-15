@@ -20,6 +20,7 @@ from app.main import create_app  # noqa: E402
 from app.models.base import Base  # noqa: E402
 from app.modules.ai_agents import models as ai_models  # noqa: F401,E402
 from app.modules.ai_platform import models as ai_platform_models  # noqa: F401,E402
+from app.modules.auth import models as auth_models  # noqa: F401,E402
 from app.modules.indexing import models as indexing_models  # noqa: F401,E402
 from app.modules.indexing.engine import models as indexing_engine_models  # noqa: F401,E402
 from app.modules.knowledge_platform import models as knowledge_platform_models  # noqa: F401,E402

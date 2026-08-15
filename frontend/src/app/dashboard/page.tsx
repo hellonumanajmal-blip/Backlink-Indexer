@@ -1,21 +1,65 @@
 "use client";
 
-import React from 'react';
-import Link from 'next/link';
-import AppShell from '@/components/app-shell/AppShell';
-import Button from '@/components/ui/Button';
-import Card, { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
-import StatusBadge from '@/components/StatusBadge';
-import { useDashboardData } from '@/lib/dashboard';
-import { cn } from '@/lib/cn';
+import React from "react";
+import Link from "next/link";
+import { Link2, Search, Globe, Eye, HelpCircle, Plus, Rss, FileJson, Webhook, ArrowRight } from "lucide-react";
+import {
+  Card,
+  StatCard,
+  EmptyState,
+  Skeleton,
+  TableWrap,
+  Th,
+  Td,
+  Pill,
+  Button,
+  useToast,
+} from "@/components/ui";
+import { useDashboardData } from "@/lib/dashboard";
 
-const DashboardPage: React.FC = () => {
+function PipelineStep({
+  label,
+  description,
+  status,
+  isLast,
+}: {
+  label: string;
+  description: string;
+  status: "completed" | "active" | "waiting";
+  isLast?: boolean;
+}) {
+  const tone =
+    status === "completed" ? "success" : status === "active" ? "violet" : "neutral";
+  return (
+    <div className="flex flex-1 items-center gap-3">
+      <div className="flex flex-col items-center gap-1.5">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-semibold ${
+            status === "completed"
+              ? "border-success/40 bg-success-soft text-success"
+              : status === "active"
+                ? "border-primary/40 bg-primary-soft text-primary"
+                : "border-border bg-surface-2 text-muted"
+          }`}
+        >
+          {status === "completed" ? "✓" : status === "active" ? "●" : "○"}
+        </span>
+        <p className="whitespace-nowrap text-xs font-medium text-foreground">{label}</p>
+        <p className="hidden text-[10px] text-muted sm:block">{description}</p>
+      </div>
+      {!isLast ? (
+        <div className="mb-6 h-px flex-1 bg-border" aria-hidden="true" />
+      ) : null}
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const toast = useToast();
   const {
     kpiMetrics,
     pipelineStatus,
     recentBacklinks,
-    activityEvents,
     discoveryChannels,
     indexingHealth,
     isLoading,
@@ -24,362 +68,198 @@ const DashboardPage: React.FC = () => {
 
   if (error) {
     return (
-      <AppShell>
-        <div className="flex flex-col items-center justify-center h-full">
-          <div className="text-red-500 mb-4">
-            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold mb-2">Error Loading Dashboard</h2>
-          <p className="text-neutral-600 mb-6">{error.message}</p>
-          <Button onClick={() => window.location.reload()}>Retry</Button>
+      <div className="flex flex-col items-center justify-center py-24">
+        <div className="mb-4 text-danger">
+          <HelpCircle className="h-10 w-10" />
         </div>
-      </AppShell>
+        <h2 className="text-lg font-semibold text-foreground">Could not load dashboard data</h2>
+        <p className="mt-2 max-w-md text-center text-sm text-muted">{error.message}</p>
+        <Button className="mt-6" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <AppShell>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 animate-pulse">
-          {[...Array(4)].map((_, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="h-8 w-24 bg-neutral-200 rounded mb-4"></div>
-                <div className="h-6 w-16 bg-neutral-200 rounded mb-2"></div>
-                <div className="h-4 w-32 bg-neutral-200 rounded"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card className="mb-6">
-              <CardContent className="p-6">
-                <div className="h-64 bg-neutral-100 rounded-lg"></div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <div className="h-6 w-48 bg-neutral-200 rounded mb-4"></div>
-                <div className="space-y-4">
-                  {[...Array(5)].map((_, index) => (
-                    <div key={index} className="flex items-center space-x-4">
-                      <div className="h-10 w-10 bg-neutral-200 rounded-full"></div>
-                      <div className="flex-1">
-                        <div className="h-4 w-32 bg-neutral-200 rounded mb-2"></div>
-                        <div className="h-3 w-48 bg-neutral-200 rounded"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="space-y-6">
-            {[...Array(3)].map((_, index) => (
-              <Card key={index}>
-                <CardContent className="p-6">
-                  <div className="h-6 w-32 bg-neutral-200 rounded mb-4"></div>
-                  <div className="h-48 bg-neutral-100 rounded-lg"></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
+  const hasData = (kpiMetrics?.length ?? 0) > 0 && (kpiMetrics?.[0]?.value ?? 0) > 0;
 
   return (
-    <AppShell>
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-        <div className="mb-4 md:mb-0">
-          <h1 className="text-2xl font-bold text-neutral-900">Overview</h1>
-          <p className="text-neutral-500">Monitor your backlink discovery, crawling, and indexing pipeline.</p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-foreground">Overview</h2>
+          <p className="mt-1 text-sm text-muted">
+            Monitor your backlink discovery and indexing workflow.
+          </p>
         </div>
-        <Link href="/dashboard/backlinks/add">
-          <Button>Add Backlinks</Button>
+        <Link href="/dashboard/backlinks">
+          <Button>
+            <Plus className="h-4 w-4" />
+            Add backlinks
+          </Button>
         </Link>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-        {kpiMetrics.map((metric: any, index: number) => (
-          <Card key={index} className="transition-all hover:shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-neutral-500">{metric.label}</div>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${metric.iconBgColor}`}>
-                  {metric.icon}
-                </div>
-              </div>
-              <div className="text-3xl font-bold text-neutral-900 mb-2">
-                {metric.value !== null ? metric.value : '—'}
-              </div>
-              <div className="text-sm text-neutral-500">
-                {metric.description}
-              </div>
-              {metric.trend && (
-                <div className={`flex items-center mt-2 ${metric.trend.direction === 'up' ? 'text-green-500' : 'text-red-500'}`}>
-                  {metric.trend.direction === 'up' ? (
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                    </svg>
-                  )}
-                  <span className="text-sm">{metric.trend.value}%</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {(kpiMetrics ?? []).map((m: any, i: number) => (
+          <StatCard
+            key={m.label || i}
+            label={m.label}
+            value={isLoading ? undefined : m.value}
+            hint={m.description}
+            icon={m.icon}
+            loading={isLoading}
+          />
         ))}
       </div>
 
-      {/* Indexing Pipeline */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Indexing Pipeline</CardTitle>
-          <CardDescription>Current status of your backlink workflow</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            {pipelineStatus.map((stage: any, index: number) => (
-              <React.Fragment key={index}>
-                <div className={`flex flex-col items-center ${index < pipelineStatus.length - 1 ? 'md:flex-row' : ''}`}>
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${stage.status === 'completed' ? 'bg-green-100 text-green-600' : stage.status === 'active' ? 'bg-blue-100 text-blue-600' : stage.status === 'waiting' ? 'bg-neutral-100 text-neutral-600' : 'bg-red-100 text-red-600'} mb-2 md:mb-0`}>
-                    {stage.icon}
-                  </div>
-                  <div className="text-center md:text-left mb-4 md:mb-0 md:ml-4">
-                    <div className="font-medium text-neutral-900">{stage.label}</div>
-                    <div className="text-sm text-neutral-500">{stage.description}</div>
-                  </div>
-                </div>
-                {index < pipelineStatus.length - 1 && (
-                  <div className="hidden md:block w-16 h-px bg-neutral-200 mx-4"></div>
-                )}
-              </React.Fragment>
+      {/* Pipeline */}
+      <Card className="p-5">
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Pipeline</h3>
+          <p className="text-[11px] text-muted">Submitted → validated → discovered → verified</p>
+        </div>
+        {isLoading ? (
+          <div className="flex gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-16 flex-1" />
             ))}
           </div>
-        </CardContent>
+        ) : (
+          <div className="flex flex-col gap-4 md:flex-row md:items-start">
+            {(pipelineStatus ?? []).map((p: any, i: number) => (
+              <PipelineStep
+                key={p.label || i}
+                label={p.label}
+                description={p.description}
+                status={p.status}
+                isLast={i === (pipelineStatus?.length ?? 0) - 1}
+              />
+            ))}
+          </div>
+        )}
       </Card>
 
-      {/* Recent Backlinks */}
-      <Card className="mb-8">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Recent Backlinks</CardTitle>
-            <CardDescription>Your most recent backlink submissions</CardDescription>
-          </div>
-          <Link href="/dashboard/backlinks/add">
-            <Button variant="outline" size="sm">Add Backlinks</Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {recentBacklinks.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="text-neutral-500 mb-4">
-                <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-neutral-900 mb-2">No backlinks yet</h3>
-              <p className="text-neutral-500 mb-6">Add your first backlink to start the indexing workflow.</p>
-              <Link href="/dashboard/backlinks/add">
-                <Button>Add Backlinks</Button>
+      {/* Recent backlinks + channels */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <Card>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h3 className="text-sm font-semibold text-foreground">Recent backlinks</h3>
+              <Link href="/dashboard/backlinks" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary-strong">
+                View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            {isLoading ? (
+              <div className="space-y-3 p-5">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : recentBacklinks && recentBacklinks.length > 0 ? (
+              <TableWrap className="rounded-none border-0">
                 <thead>
-                  <tr className="border-b border-neutral-200">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Source URL</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Target URL</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Status</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Discovery</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Index Status</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Last Checked</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-neutral-500">Actions</th>
+                  <tr>
+                    <Th>Source URL</Th>
+                    <Th>Domain</Th>
+                    <Th>Discovery</Th>
+                    <Th>Index Status</Th>
+                    <Th>Last checked</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentBacklinks.map((backlink: any, index: number) => (
-                    <tr key={index} className={cn(
-                      'border-b border-neutral-100',
-                      index % 2 === 0 ? 'bg-neutral-50' : 'bg-white'
-                    )}>
-                      <td className="px-4 py-3 text-sm text-neutral-900 truncate max-w-xs">
-                        {backlink.sourceUrl}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-neutral-900 truncate max-w-xs">
-                        {backlink.targetUrl}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={backlink.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={backlink.discoveryStatus} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={backlink.indexStatus} />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-neutral-500">
-                        {backlink.lastChecked ? new Date(backlink.lastChecked).toLocaleString() : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link href={`/dashboard/backlinks/${backlink.id}`}>
-                          <Button variant="ghost" size="sm">View</Button>
-                        </Link>
-                      </td>
+                  {recentBacklinks.map((b: any) => (
+                    <tr key={b.id}>
+                      <Td className="max-w-[220px]">
+                        <span className="block truncate text-foreground" title={b.sourceUrl}>
+                          {b.sourceUrl}
+                        </span>
+                      </Td>
+                      <Td className="text-muted">{b.targetUrl}</Td>
+                      <Td>
+                        <Pill tone="info">{b.discoveryStatus || "pending"}</Pill>
+                      </Td>
+                      <Td>
+                        <Pill tone={String(b.indexStatus).toLowerCase() === "indexed" ? "success" : String(b.indexStatus).toLowerCase() === "not_indexed" ? "danger" : "neutral"}>
+                          {b.indexStatus}
+                        </Pill>
+                      </Td>
+                      <Td className="text-muted">
+                        {b.lastChecked ? new Date(b.lastChecked).toLocaleDateString() : "—"}
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Activity / Pipeline Events */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Events in your backlink workflow</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {activityEvents.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-neutral-500 mb-2">
-                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-neutral-500">Your indexing activity will appear here.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activityEvents.map((event: any, index: number) => (
-                    <div key={index} className="flex items-start">
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${event.type === 'success' ? 'bg-green-100 text-green-600' : event.type === 'warning' ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'} mr-3`}>
-                        {event.icon}
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-neutral-900">{event.title}</div>
-                        <div className="text-sm text-neutral-500">{event.description}</div>
-                        <div className="text-xs text-neutral-400 mt-1">
-                          {new Date(event.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+              </TableWrap>
+            ) : (
+              <EmptyState
+                icon={<Link2 className="h-8 w-8" />}
+                title="No backlinks yet"
+                description="Add URLs that already contain a backlink to your site. We will validate them before discovery."
+                action={
+                  <Link href="/dashboard/backlinks">
+                    <Button variant="secondary">
+                      <Plus className="h-4 w-4" />
+                      Add backlinks
+                    </Button>
+                  </Link>
+                }
+              />
+            )}
           </Card>
         </div>
 
-        {/* Discovery Status Card */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Discovery Status</CardTitle>
-              <CardDescription>Current state of discovery channels</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {discoveryChannels.map((channel: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${channel.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-neutral-100 text-neutral-600'} mr-3`}>
-                        {channel.icon}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-neutral-900">{channel.name}</div>
-                        <div className="text-xs text-neutral-500">{channel.description}</div>
-                      </div>
+          {/* Discovery channels */}
+          <Card className="p-5">
+            <h3 className="mb-4 text-sm font-semibold text-foreground">Discovery channels</h3>
+            <ul className="space-y-3">
+              {(discoveryChannels ?? []).map((c: any, i: number) => (
+                <li key={c.name || i} className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-2 text-primary">
+                    {c.icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
+                    <p className="truncate text-xs text-muted">{c.description}</p>
+                  </div>
+                  <Pill tone="success">Active</Pill>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          {/* Index health */}
+          <Card className="p-5">
+            <h3 className="mb-4 text-sm font-semibold text-foreground">Index status</h3>
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : hasData ? (
+              <div className="space-y-3">
+                {(indexingHealth ?? []).map((h: any) => (
+                  <div key={h.label} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted">{h.label}</span>
+                      <span className="font-semibold text-foreground">{h.value}</span>
                     </div>
-                    <Badge variant={channel.status === 'active' ? 'success' : 'default'} size="sm">
-                      {channel.status}
-                    </Badge>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                      <div className={`h-full rounded-full ${h.color || "bg-primary"}`} style={{ width: `${Math.min(100, h.value || 0)}%` }} />
+                    </div>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Indexing Health */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Indexing Health</CardTitle>
-              <CardDescription>Summary of your indexing performance</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {indexingHealth.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-neutral-500 mb-2">
-                    <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-neutral-500">Indexing health data will appear here.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {indexingHealth.map((item: any, index: number) => (
-                    <div key={index} className="flex items-center">
-                      <div className={`w-2 h-2 rounded-full ${item.color} mr-3`}></div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-neutral-900">{item.label}</div>
-                      </div>
-                      <div className="text-sm font-medium text-neutral-900 w-12 text-right">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Shortcuts to common tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Link href="/dashboard/backlinks/add">
-                  <Button variant="outline" className="w-full">Add Backlinks</Button>
-                </Link>
-                <Link href="/dashboard/backlinks/import">
-                  <Button variant="outline" className="w-full">Import CSV</Button>
-                </Link>
-                <Link href="/dashboard/discovery">
-                  <Button variant="outline" className="w-full">View Discovery</Button>
-                </Link>
-                <Link href="/dashboard/crawl-monitoring">
-                  <Button variant="outline" className="w-full">Crawl Monitoring</Button>
-                </Link>
-                <Link href="/dashboard/index-verification">
-                  <Button variant="outline" className="w-full">Index Verification</Button>
-                </Link>
-                <Link href="/dashboard/intelligence">
-                  <Button variant="outline" className="w-full">Intelligence</Button>
-                </Link>
-              </div>
-            </CardContent>
+            ) : (
+              <p className="text-sm text-muted">No data yet — index status appears once verification evidence exists.</p>
+            )}
           </Card>
         </div>
       </div>
-    </AppShell>
+    </div>
   );
-};
-
-export default DashboardPage;
+}

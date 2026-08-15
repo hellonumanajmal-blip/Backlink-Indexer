@@ -12,6 +12,7 @@ from app.models.base import Base
 # Import all models so metadata is populated for autogenerate.
 from app.modules.ai_agents import models as ai_agents_models  # noqa: F401
 from app.modules.ai_platform import models as ai_platform_models  # noqa: F401
+from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.indexing import models as indexing_models  # noqa: F401
 from app.modules.integrations import models as integration_models  # noqa: F401
 from app.modules.knowledge_platform import models as knowledge_platform_models  # noqa: F401
