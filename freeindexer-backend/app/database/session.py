@@ -38,3 +38,25 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+def dispose_engine_after_fork() -> None:
+    """Reset the engine's connection pool after ``os.fork()``.
+
+    ``engine`` is created at import time, so a Celery prefork child inherits
+    the parent's pool. The inherited asyncpg connections are bound to the
+    parent's event loop and to socket file descriptors shared with the parent;
+    using (or closing) them inside the child corrupts protocol state and
+    raises ``asyncpg.exceptions.InterfaceError``.
+
+    ``Engine.dispose(close=False)`` is SQLAlchemy's documented post-fork
+    pattern (added in 1.4.33): it replaces the inherited pool with a fresh,
+    empty one *without* touching the old connections, so the parent keeps
+    sole ownership of its sockets and event listeners are carried over. The
+    child's next checkout opens a new connection bound to the child's own
+    event loop.
+
+    Synchronous by design: it must be callable from Celery's synchronous
+    ``worker_process_init`` signal, before any child event loop exists.
+    """
+    engine.sync_engine.dispose(close=False)

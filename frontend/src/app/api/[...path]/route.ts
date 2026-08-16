@@ -105,11 +105,24 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   const method = req.method;
   const url = new URL(req.url);
 
+  // Forward the httpOnly session cookie as Authorization for every backend call.
+  // Without this, protected FastAPI routes (indexing engine, backlinks, etc.)
+  // return 401 even when the browser has a valid session.
+  const callFastAPI = (
+    apiPath: string,
+    options: {
+      method?: string;
+      body?: any;
+      headers?: Record<string, string>;
+      auth?: string;
+    } = {},
+  ) => fetchFastAPI(apiPath, options, req);
+
   // Real authentication — forwarded to the backend. The backend owns the
   // users table and signs the JWT with FI_SECRET_KEY; the proxy only stores
   // the token in an httpOnly cookie and forwards it as a bearer credential.
   if (pathStr === "auth/signup" && method === "POST") {
-    const res = await fetchFastAPI("/api/auth/signup", { method: "POST", body: await req.text() });
+    const res = await callFastAPI("/api/auth/signup", { method: "POST", body: await req.text() });
     if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
@@ -122,7 +135,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     return response;
   }
   if (pathStr === "auth/login" && method === "POST") {
-    const res = await fetchFastAPI("/api/auth/login", { method: "POST", body: await req.text() });
+    const res = await callFastAPI("/api/auth/login", { method: "POST", body: await req.text() });
     if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
     const data = await res.json().catch(() => null);
     if (!res.ok) {
@@ -135,7 +148,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     return response;
   }
   if (pathStr === "auth/me") {
-    const res = await fetchFastAPI("/api/auth/me", { method: "GET" }, req);
+    const res = await callFastAPI("/api/auth/me", { method: "GET" });
     if (!res) return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
     const data = await res.json().catch(() => null);
     return NextResponse.json(data, { status: res.status });
@@ -191,7 +204,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
 
   // Public featured -> FastAPI unauthenticated discovery inventory
   if (pathStr === "public/featured") {
-    const res = await fetchFastAPI("/api/public/featured?limit=100");
+    const res = await callFastAPI("/api/public/featured?limit=100");
     if (res && res.ok) {
       return NextResponse.json(await res.json());
     }
@@ -206,7 +219,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   if (pathStr === "discovery/submit" && method === "POST") {
     const body = await req.json().catch(() => ({}));
     const submitUrls: string[] = Array.isArray(body.urls) ? body.urls : [];
-    const bulkRes = await fetchFastAPI("/api/indexing/backlinks/bulk", {
+    const bulkRes = await callFastAPI("/api/indexing/backlinks/bulk", {
       method: "POST",
       body: { urls: submitUrls, source: "discovery" },
     });
@@ -219,7 +232,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   }
 
   if (pathStr === "discovery/summary") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=1");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=1");
     let total = 0;
     if (res && res.ok) {
       const data = await res.json();
@@ -238,7 +251,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   // Endpoint 5: GET /api/backlinks/export/csv
   // FastAPI endpoint: GET /api/indexing/backlinks?limit=500
   if (pathStr === "backlinks/export/csv" && method === "GET") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=500");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=500");
     let backlinks: any[] = [];
     if (res && res.ok) {
       const data = await res.json();
@@ -280,7 +293,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   // Endpoint 6: GET /api/backlinks/export/json
   // FastAPI endpoint: GET /api/indexing/backlinks?limit=500
   if (pathStr === "backlinks/export/json" && method === "GET") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=500");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=500");
     if (res && res.ok) {
       const data = await res.json();
       return NextResponse.json(data.items || []);
@@ -291,7 +304,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   // Endpoint 7: POST /api/sync
   // FastAPI endpoint: POST /api/indexing/dispatch/pending
   if (pathStr === "sync" && method === "POST") {
-    const res = await fetchFastAPI("/api/indexing/dispatch/pending", { method: "POST" });
+    const res = await callFastAPI("/api/indexing/dispatch/pending", { method: "POST" });
     if (res && res.ok) {
       const data = await res.json();
       return NextResponse.json({
@@ -311,7 +324,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   if (pathStr === "backlinks/bulk-import" && method === "POST") {
     const body = await req.json().catch(() => ({}));
     const urlsText = typeof body.urls === "string" ? body.urls : Array.isArray(body.urls) ? body.urls.join("\n") : "";
-    const res = await fetchFastAPI("/api/indexing/backlinks/bulk", {
+    const res = await callFastAPI("/api/indexing/backlinks/bulk", {
       method: "POST",
       body: {
         urls: urlsText,
@@ -396,7 +409,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     (path.length === 4 && path[0] === "indexing" && path[1] === "backlinks" && path[3] === "dispatch" && method === "POST")
   ) {
     const id = path.length === 3 ? path[1] : path[2];
-    const res = await fetchFastAPI(`/api/indexing/backlinks/${id}/dispatch`, { method: "POST" });
+    const res = await callFastAPI(`/api/indexing/backlinks/${id}/dispatch`, { method: "POST" });
     if (res && res.ok) {
       const data = await res.json();
       return NextResponse.json({
@@ -421,7 +434,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   // FastAPI mapping: GET /api/indexing/backlinks/{id} -> build google search url
   if (path.length === 3 && path[0] === "backlinks" && path[2] === "google-check-url" && method === "GET") {
     const id = path[1];
-    const res = await fetchFastAPI(`/api/indexing/backlinks/${id}`);
+    const res = await callFastAPI(`/api/indexing/backlinks/${id}`);
     if (res && res.ok) {
       const backlink = await res.json();
       const googleCheckUrl = `https://www.google.com/search?q=site:${encodeURIComponent(backlink.url)}`;
@@ -443,7 +456,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     // Endpoint 1: GET /api/backlinks/:id
     // FastAPI endpoint: GET /api/indexing/backlinks/{id} + GET /api/indexing/backlinks/{id}/logs
     if (method === "GET") {
-      const res = await fetchFastAPI(`/api/indexing/backlinks/${id}`);
+      const res = await callFastAPI(`/api/indexing/backlinks/${id}`);
       if (!res || res.status === 404) {
         return NextResponse.json({ error: "Backlink not found" }, { status: 404 });
       }
@@ -452,7 +465,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
       }
       const backlink = await res.json();
 
-      const logsRes = await fetchFastAPI(`/api/indexing/backlinks/${id}/logs`);
+      const logsRes = await callFastAPI(`/api/indexing/backlinks/${id}/logs`);
       let status_history: any[] = [];
       if (logsRes && logsRes.ok) {
         const logs = await logsRes.json();
@@ -482,7 +495,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
       // Update status if present
       if (rawStatus) {
         const normStatus = normalizeStatus(rawStatus);
-        const patchRes = await fetchFastAPI(`/api/indexing/backlinks/${id}/status`, {
+        const patchRes = await callFastAPI(`/api/indexing/backlinks/${id}/status`, {
           method: "PATCH",
           body: { index_status: normStatus },
         });
@@ -492,7 +505,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
       }
 
       // Update general fields
-      const generalRes = await fetchFastAPI(`/api/indexing/backlinks/${id}`, {
+      const generalRes = await callFastAPI(`/api/indexing/backlinks/${id}`, {
         method: "PUT",
         // Only forward keys the caller actually sent: the backend applies a
         // field when it is non-null, so passing undefined leaves it untouched.
@@ -531,7 +544,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     // Endpoint 3: DELETE /api/backlinks/:id
     // FastAPI endpoint: DELETE /api/indexing/backlinks/{id}
     if (method === "DELETE") {
-      const delRes = await fetchFastAPI(`/api/indexing/backlinks/${id}`, { method: "DELETE" });
+      const delRes = await callFastAPI(`/api/indexing/backlinks/${id}`, { method: "DELETE" });
       if (!delRes || !delRes.ok) {
         return NextResponse.json({ error: "Failed to delete backlink on FastAPI backend" }, { status: delRes ? delRes.status : 500 });
       }
@@ -554,7 +567,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
       queryParams.set("limit", String(pageSize));
       queryParams.set("offset", String((page - 1) * pageSize));
 
-      const res = await fetchFastAPI(`/api/indexing/backlinks?${queryParams.toString()}`);
+      const res = await callFastAPI(`/api/indexing/backlinks?${queryParams.toString()}`);
       if (res && res.ok) {
         const data = await res.json();
         const items = (data.items || []).map((b: any) => ({
@@ -575,7 +588,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
 
     if (method === "POST") {
       const body = await req.json().catch(() => ({}));
-      const res = await fetchFastAPI("/api/indexing/backlinks", {
+      const res = await callFastAPI("/api/indexing/backlinks", {
         method: "POST",
         body: {
           url: body.url || "",
@@ -599,7 +612,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
       if (res && res.ok) {
         const created = await res.json();
         // Dispatch newly created backlink immediately through FastAPI dispatch chain
-        await fetchFastAPI(`/api/indexing/backlinks/${created.id}/dispatch`, { method: "POST" });
+        await callFastAPI(`/api/indexing/backlinks/${created.id}/dispatch`, { method: "POST" });
 
         return NextResponse.json({
           ...created,
@@ -614,7 +627,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
 
   // Analytics -> FastAPI GET /api/indexing/backlinks?limit=500
   if (pathStr === "analytics") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=500");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=500");
     let backlinks: any[] = [];
     if (res && res.ok) {
       const data = await res.json();
@@ -663,7 +676,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     const body = await req.json().catch(() => ({}));
     if (body.backlink_id && body.status) {
       const norm = normalizeStatus(body.status);
-      await fetchFastAPI(`/api/indexing/backlinks/${body.backlink_id}/status`, {
+      await callFastAPI(`/api/indexing/backlinks/${body.backlink_id}/status`, {
         method: "PATCH",
         body: { index_status: norm },
       });
@@ -673,7 +686,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
 
   // Search Intelligence Overview -> FastAPI GET /api/indexing/backlinks?limit=500
   if (pathStr === "search-intelligence/overview") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=500");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=500");
     let backlinks: any[] = [];
     if (res && res.ok) {
       const data = await res.json();
@@ -896,7 +909,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
 
   // Discovery Signals -> FastAPI GET /api/indexing/backlinks?limit=500
   if (pathStr === "discovery-signals/dashboard/summary") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=500");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=500");
     let backlinks: any[] = [];
     if (res && res.ok) {
       const data = await res.json();
@@ -927,7 +940,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   }
 
   if (pathStr === "discovery-signals") {
-    const res = await fetchFastAPI("/api/indexing/backlinks?limit=20");
+    const res = await callFastAPI("/api/indexing/backlinks?limit=20");
     let backlinks: any[] = [];
     if (res && res.ok) {
       const data = await res.json();
@@ -1024,7 +1037,7 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   }
 
   // Fallback direct proxy to FastAPI for any indexing / observability / other endpoints
-  const fastApiRes = await fetchFastAPI(`/api/${pathStr}`, {
+  const fastApiRes = await callFastAPI(`/api/${pathStr}`, {
     method,
     body: method !== "GET" && method !== "HEAD" ? await req.json().catch(() => undefined) : undefined,
   });

@@ -10,11 +10,11 @@ from typing import Any, Dict
 
 from app.database import AsyncSessionLocal
 from app.modules.indexing.engine.orchestrator import IndexingEngine
-from app.workers.celery_app import celery_app
+from app.workers.celery_app import celery_app, run_async
 
 
 def _run(coro):
-    return asyncio.run(coro)
+    return run_async(coro)
 
 
 @celery_app.task(name="indexing_engine.process_job", bind=True, max_retries=3, soft_time_limit=120)

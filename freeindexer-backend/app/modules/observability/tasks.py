@@ -5,11 +5,11 @@ from typing import Any, Dict
 
 from app.database import AsyncSessionLocal
 from app.modules.observability.service import ObservabilityService
-from app.workers.celery_app import celery_app
+from app.workers.celery_app import celery_app, run_async
 
 
 def _run(coro):
-    return __import__("asyncio").run(coro)
+    return run_async(coro)
 
 
 @celery_app.task(name="observability.health_monitoring")

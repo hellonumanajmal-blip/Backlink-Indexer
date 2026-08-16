@@ -6,11 +6,11 @@ from typing import Any, Dict, Optional
 from app.database import AsyncSessionLocal
 from app.modules.knowledge_platform.service import KnowledgePlatformService
 
-from app.workers.celery_app import celery_app
+from app.workers.celery_app import celery_app, run_async
 
 
 def _run(coro):
-    return __import__("asyncio").run(coro)
+    return run_async(coro)
 
 
 @celery_app.task(name="knowledge_platform.index_document")
