@@ -58,8 +58,8 @@ export default function IndexVerificationPage() {
       </div>
 
       <Card className="p-5">
-        <h3 className="text-sm font-semibold text-white">Verification policy</h3>
-        <p className="mt-2 text-xs leading-6 text-slate-500">
+        <h3 className="text-sm font-semibold text-foreground">Verification policy</h3>
+        <p className="mt-2 text-xs leading-6 text-muted">
           INDEXED only appears when the backend verification engine provides reliable evidence.
           UNKNOWN is never converted into INDEXED. Discovery acceptance or HTTP 200 is never called
           &quot;Google indexed&quot;.
@@ -68,7 +68,7 @@ export default function IndexVerificationPage() {
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">Verification Evidence</h3>
+          <h3 className="text-sm font-semibold text-foreground">Verification Evidence</h3>
         </div>
         {jobs === null ? (
           <div className="space-y-3 p-5">
@@ -98,9 +98,9 @@ export default function IndexVerificationPage() {
               {jobs.map((j) => {
                 const vis = (j.visibility_status || "UNKNOWN").toUpperCase();
                 return (
-                  <tr key={j.id} className="hover:bg-white/[0.02]">
+                  <tr key={j.id} className="hover:bg-surface-2">
                     <Td className="max-w-[240px]">
-                      <p className="truncate text-sm font-medium text-white">{j.source_url}</p>
+                      <p className="truncate text-sm font-medium text-foreground">{j.source_url}</p>
                     </Td>
                     <Td><PipelinePill status={j.pipeline_status} /></Td>
                     <Td>
@@ -112,11 +112,11 @@ export default function IndexVerificationPage() {
                       {j.verification_status ? (
                         <Pill tone="info">{j.verification_status}</Pill>
                       ) : (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs text-muted">—</span>
                       )}
                     </Td>
-                    <Td className="text-xs text-slate-400">{j.verification_method || "—"}</Td>
-                    <Td className="text-xs text-slate-500">
+                    <Td className="text-xs text-muted">{j.verification_method || "—"}</Td>
+                    <Td className="text-xs text-muted">
                       {j.indexed_at ? new Date(j.indexed_at).toLocaleString() : "—"}
                     </Td>
                   </tr>

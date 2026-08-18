@@ -33,13 +33,20 @@ function setSessionCookie(response: NextResponse, token: string) {
   response.cookies.set("session", token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
 }
 
 function clearSessionCookie(response: NextResponse) {
-  response.cookies.set("session", "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set("session", "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 async function fetchFastAPI(
@@ -375,9 +382,13 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
     try {
       // Direct fetch (not fetchFastAPI) so the multipart boundary is set by
       // fetch itself rather than being overridden with application/json.
+      const csvHeaders: Record<string, string> = {};
+      const csvToken = getSessionToken(req);
+      if (csvToken) csvHeaders.Authorization = `Bearer ${csvToken}`;
       res = await fetch(`${FASTAPI_URL.replace(/\/$/, "")}/api/indexing/backlinks/import-csv`, {
         method: "POST",
         body: outForm,
+        headers: csvHeaders,
       });
     } catch (error) {
       console.error("[FASTAPI PROXY ERROR] CSV import:", error);
@@ -583,7 +594,16 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
           page_size: pageSize,
         });
       }
-      return NextResponse.json({ items: [], total: 0, page, page_size: pageSize });
+      if (!res) {
+        return NextResponse.json({ error: "Backend unavailable" }, { status: 502 });
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return NextResponse.json(
+          { error: extractApiError(data, "Failed to load backlinks.") },
+          { status: res.status }
+        );
+      }
     }
 
     if (method === "POST") {

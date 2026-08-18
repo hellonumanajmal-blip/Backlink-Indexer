@@ -9,8 +9,6 @@ import {
   FileJson,
   Webhook,
   Network,
-  Gauge,
-  Target,
   FlaskConical,
   CheckCircle2,
   Clock,
@@ -25,7 +23,7 @@ import {
   Td,
   PipelinePill,
   Drawer,
-  Button,
+  PageError,
   useToast,
 } from "@/components/ui";
 import { listJobs, getJobDetail, EngineJob, JobDetail } from '@/lib/dashboard';
@@ -56,15 +54,18 @@ export default function DiscoveryPage() {
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState("");
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     const res = await listJobs({ limit: 25, pipeline_status: filter || undefined });
     if (res.ok) {
       setJobs(res.data.items);
       setTotal(res.data.total);
+      setError("");
     } else {
       setJobs([]);
-      if (res.status === 401) toast.push("error", "Backend requires authentication for job data.");
+      setTotal(0);
+      setError(res.status === 401 ? "Authentication required." : res.error || "Failed to load jobs.");
     }
   }, [filter, toast]);
 
@@ -77,7 +78,7 @@ export default function DiscoveryPage() {
     setDetailLoading(true);
     const res = await getJobDetail(job.id);
     setDetailLoading(false);
-    if (res.ok) setDetail({ ...res.data, job: { ...res.data.job, project: 'default', quality_score: 50, discovery_score: 50, visibility_status: 'unknown' } });
+    if (res.ok) setDetail(res.data);
     else toast.push("error", res.error);
   }
 
@@ -90,6 +91,7 @@ export default function DiscoveryPage() {
 
   return (
     <div className="space-y-6">
+      {error ? <PageError message={error} onRetry={() => void load()} /> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Jobs" value={jobs === null ? "—" : counts.total} icon={<Zap className="h-4 w-4" />} tone="violet" loading={jobs === null} />
         <StatCard label="Validated" value={jobs === null ? "—" : counts.validated} icon={<CheckCircle2 className="h-4 w-4" />} tone="info" loading={jobs === null} />
@@ -99,16 +101,16 @@ export default function DiscoveryPage() {
 
       {/* Channels */}
       <Card className="p-5">
-        <h3 className="mb-1 text-sm font-semibold text-white">Legitimate Discovery Channels</h3>
-        <p className="mb-4 text-xs text-slate-500">Discovery signals ≠ indexing. None of these guarantee indexing.</p>
+        <h3 className="mb-1 text-sm font-semibold text-foreground">Legitimate discovery channels</h3>
+        <p className="mb-4 text-xs text-muted">Discovery signals ≠ indexing. None of these guarantee indexing.</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {CHANNELS.map((c) => (
-            <div key={c.name} className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center">
-              <div className="mx-auto mb-2 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-400/30 bg-indigo-500/10 text-indigo-300">
+            <div key={c.name} className="rounded-lg border border-border bg-surface-2 p-4 text-center">
+              <div className="mx-auto mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-muted">
                 {c.icon}
               </div>
-              <p className="text-xs font-semibold text-white">{c.name}</p>
-              <p className="text-[10px] text-slate-500">{c.note}</p>
+              <p className="text-xs font-semibold text-foreground">{c.name}</p>
+              <p className="text-[10px] text-muted">{c.note}</p>
             </div>
           ))}
         </div>
@@ -116,12 +118,12 @@ export default function DiscoveryPage() {
 
       {/* Workflow stages */}
       <Card className="p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">Pipeline Stages</h3>
+        <h3 className="mb-4 text-sm font-semibold text-foreground">Pipeline stages</h3>
         <div className="flex flex-wrap items-center gap-2">
           {STAGES.map((s, i) => (
             <React.Fragment key={s}>
-              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-slate-300">{s}</span>
-              {i < STAGES.length - 1 ? <span className="text-slate-700">→</span> : null}
+              <span className="rounded-md border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-foreground">{s}</span>
+              {i < STAGES.length - 1 ? <span className="text-muted">→</span> : null}
             </React.Fragment>
           ))}
         </div>
@@ -130,7 +132,7 @@ export default function DiscoveryPage() {
       {/* Jobs */}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">Indexing Jobs</h3>
+          <h3 className="text-sm font-semibold text-foreground">Indexing jobs</h3>
           <select
             className="h-9 rounded-md border border-border bg-surface-2 px-3 text-xs text-foreground focus:border-primary focus:outline-none"
             value={filter}
@@ -174,16 +176,16 @@ export default function DiscoveryPage() {
             </thead>
             <tbody>
               {jobs.map((j) => (
-                <tr key={j.id} className="cursor-pointer hover:bg-white/[0.03]" onClick={() => openDetail(j)}>
+                <tr key={j.id} className="cursor-pointer hover:bg-surface-2" onClick={() => openDetail(j)}>
                   <Td className="max-w-[240px]">
-                    <p className="truncate text-sm font-medium text-white">{j.source_url}</p>
-                    <p className="text-xs text-slate-500">{j.project || "—"}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{j.source_url}</p>
+                    <p className="text-xs text-muted">{j.source_domain || "—"}</p>
                   </Td>
                   <Td><PipelinePill status={j.pipeline_status} /></Td>
-                  <Td className="text-xs text-slate-400">{j.http_status ?? "—"}</Td>
-                  <Td className="text-xs text-slate-300">{j.quality_score ?? "—"}</Td>
-                  <Td className="text-xs text-slate-300">{j.discovery_score ?? "—"}</Td>
-                  <Td className="text-xs text-slate-400">{(j.visibility_status || "UNKNOWN").toLowerCase()}</Td>
+                  <Td className="text-xs text-muted">{j.http_status ?? "—"}</Td>
+                  <Td className="text-xs text-foreground">{j.quality_score ?? "—"}</Td>
+                  <Td className="text-xs text-foreground">{j.discovery_score ?? "—"}</Td>
+                  <Td className="text-xs text-muted">{(j.visibility_status || "UNKNOWN").toLowerCase()}</Td>
                 </tr>
               ))}
             </tbody>
@@ -202,11 +204,11 @@ export default function DiscoveryPage() {
         ) : detail ? (
           <div className="space-y-5">
             <div>
-              <p className="break-all text-sm font-medium text-white">{detail.job.source_url}</p>
+              <p className="break-all text-sm font-medium text-foreground">{detail.job.source_url}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <PipelinePill status={detail.job.pipeline_status} />
                 {detail.job.http_status ? (
-                  <span className="rounded-full border border-border bg-surface-2 px-2.5 py-0.5 text-xs text-slate-300">
+                  <span className="rounded-full border border-border bg-surface-2 px-2.5 py-0.5 text-xs text-muted">
                     HTTP {detail.job.http_status}
                   </span>
                 ) : null}
@@ -214,18 +216,18 @@ export default function DiscoveryPage() {
             </div>
             <div className="space-y-3">
               {detail.timeline.length === 0 ? (
-                <p className="text-sm text-slate-500">No timeline events recorded yet.</p>
+                <p className="text-sm text-muted">No timeline events recorded yet.</p>
               ) : (
                 detail.timeline.map((ev: any, i: number) => (
                   <div key={ev.id} className="relative flex gap-3">
                     {i < detail.timeline.length - 1 ? (
-                      <span className="absolute left-[9px] top-6 h-full w-px bg-white/10" />
+                      <span className="absolute left-[9px] top-6 h-full w-px bg-border" />
                     ) : null}
-                    <span className="relative z-10 mt-1.5 h-[10px] w-[10px] shrink-0 rounded-full border-2 border-indigo-400 bg-[#0b1022]" />
+                    <span className="relative z-10 mt-1.5 h-[10px] w-[10px] shrink-0 rounded-full border-2 border-primary bg-background" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-white">{ev.to_status.replace(/_/g, " ").toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}</p>
-                      {ev.note ? <p className="text-xs text-slate-500">{ev.note}</p> : null}
-                      <p className="text-[11px] text-slate-600">
+                      <p className="text-sm font-medium text-foreground">{ev.to_status.replace(/_/g, " ").toLowerCase().replace(/^./, (c: string) => c.toUpperCase())}</p>
+                      {ev.note ? <p className="text-xs text-muted">{ev.note}</p> : null}
+                      <p className="text-[11px] text-muted">
                         {ev.created_at ? new Date(ev.created_at).toLocaleString() : ""}
                       </p>
                     </div>

@@ -77,8 +77,8 @@ export default function ExperimentsPage() {
       </div>
 
       <Card className="p-5">
-        <h3 className="text-sm font-semibold text-white">How experiments work</h3>
-        <p className="mt-2 text-xs leading-6 text-slate-500">
+        <h3 className="text-sm font-semibold text-foreground">How experiments work</h3>
+        <p className="mt-2 text-xs leading-6 text-muted">
           Only jobs with an experiment start time are included. BASELINE_ALREADY_INDEXED URLs are
           excluded from rate denominators. No experiment is called a winner unless the data
           supports it — with minimum sample sizes and significance checks on the backend.
@@ -87,7 +87,7 @@ export default function ExperimentsPage() {
 
       {funnel ? (
         <Card className="p-5">
-          <h3 className="mb-4 text-sm font-semibold text-white">Discovery Funnel</h3>
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Discovery Funnel</h3>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
               { label: "Signal Accepted", value: funnel.discovery_signal_accepted ?? "—" },
@@ -95,21 +95,21 @@ export default function ExperimentsPage() {
               { label: "URL Crawled", value: funnel.target_url_crawled ?? "—" },
               { label: "URL Indexed", value: funnel.target_url_indexed ?? "—" },
             ].map((f) => (
-              <div key={f.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center">
-                <p className="text-2xl font-bold text-white">{f.value}</p>
-                <p className="mt-1 text-xs text-slate-500">{f.label}</p>
+              <div key={f.label} className="rounded-lg border border-border bg-surface-2 p-4 text-center">
+                <p className="text-2xl font-bold text-foreground">{f.value}</p>
+                <p className="mt-1 text-xs text-muted">{f.label}</p>
               </div>
             ))}
           </div>
           {funnel.note ? (
-            <p className="mt-3 text-xs text-amber-300/80">{funnel.note}</p>
+            <p className="mt-3 text-xs text-warning">{funnel.note}</p>
           ) : null}
         </Card>
       ) : null}
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">Experiment Groups</h3>
+          <h3 className="text-sm font-semibold text-foreground">Experiment Groups</h3>
         </div>
         {report === null ? (
           <div className="space-y-3 p-5">
@@ -138,22 +138,22 @@ export default function ExperimentsPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} className="hover:bg-white/[0.02]">
+                <tr key={r.key} className="hover:bg-surface-2">
                   <Td>
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-indigo-400/30 bg-indigo-500/10 text-xs font-bold text-indigo-300">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface-2 text-xs font-bold text-foreground">
                       {r.key}
                     </span>
                   </Td>
                   <Td className="max-w-[240px]">
-                    <p className="text-sm text-slate-200">{r.label || "—"}</p>
+                    <p className="text-sm text-foreground">{r.label || "—"}</p>
                   </Td>
-                  <Td className="text-sm text-slate-300">{r.n}</Td>
-                  <Td className="text-sm text-slate-300">{r.indexed ?? 0}</Td>
-                  <Td className="text-sm text-slate-300">{r.unknown ?? 0}</Td>
+                  <Td className="text-sm text-foreground">{r.n}</Td>
+                  <Td className="text-sm text-foreground">{r.indexed ?? 0}</Td>
+                  <Td className="text-sm text-foreground">{r.unknown ?? 0}</Td>
                   <Td>
                     <div className="flex items-center gap-2">
                       <ProgressBar value={r.rate} tone={r.rate >= 50 ? "success" : r.rate >= 20 ? "warning" : "neutral"} className="w-20" />
-                      <span className="text-xs text-slate-400">{r.rate}%</span>
+                      <span className="text-xs text-muted">{r.rate}%</span>
                     </div>
                   </Td>
                   <Td>
@@ -169,11 +169,11 @@ export default function ExperimentsPage() {
       </Card>
 
       {report?.disclaimer ? (
-        <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-6 text-amber-100/80">
+        <div className="rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-xs leading-6 text-warning">
           {report.disclaimer}
         </div>
       ) : (
-        <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-6 text-amber-100/80">
+        <div className="rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-xs leading-6 text-warning">
           INDEXED requires reliable verification evidence. Discovery is not indexing. Crawl is not
           indexing. This is not a Google Indexing API.
         </div>

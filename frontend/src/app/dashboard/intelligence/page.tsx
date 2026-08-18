@@ -61,18 +61,18 @@ export default function IntelligencePage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Quality Score (avg)" value={jobs === null || total === 0 ? "—" : Math.round(jobs.reduce((s, j) => s + (j.quality_score || 0), 0) / total)} icon={<Gauge className="h-4 w-4" />} tone="violet" loading={jobs === null} />
         <StatCard label="Submitted" value={jobs === null ? "—" : total} icon={<Target className="h-4 w-4" />} tone="info" loading={jobs === null} />
-        <StatCard label="Success Rate" value={jobs === null ? "—" : `${successRate}%`} icon={<TrendingUp className="h-4 w-4" />} tone="success" loading={jobs === null} />
+        <StatCard label="Success Rate" value={jobs === null || total === 0 ? "—" : `${successRate}%`} icon={<TrendingUp className="h-4 w-4" />} tone="success" loading={jobs === null} />
         <StatCard label="Domains Tracked" value={jobs === null ? "—" : domains.length} icon={<Globe2 className="h-4 w-4" />} tone="warning" loading={jobs === null} />
       </div>
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-white">Engine Snapshot</h3>
+          <h3 className="text-sm font-semibold text-foreground">Engine Snapshot</h3>
           {snapshot?.recalculated_at ? (
-            <span className="text-xs text-slate-500">Recalculated {new Date(snapshot.recalculated_at as string).toLocaleString()}</span>
+            <span className="text-xs text-muted">Recalculated {new Date(snapshot.recalculated_at as string).toLocaleString()}</span>
           ) : null}
         </div>
-        <p className="mt-2 text-xs leading-6 text-slate-500">
+        <p className="mt-2 text-xs leading-6 text-muted">
           Historical insights are descriptive, not predictions. Every number here is derived from
           observed operational data — backlinks, jobs, crawls, and verification evidence.
         </p>
@@ -83,14 +83,14 @@ export default function IntelligencePage() {
             { label: "Priority Score", value: snapshot?.priority_score },
             { label: "Health Score", value: snapshot?.health_score },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-xs text-slate-500">{s.label}</p>
-              <p className="mt-1 text-2xl font-bold text-white">{s.value == null ? "—" : String(s.value)}</p>
+            <div key={s.label} className="rounded-lg border border-border bg-surface-2 p-4">
+              <p className="text-xs text-muted">{s.label}</p>
+              <p className="mt-1 text-2xl font-bold text-foreground">{s.value == null ? "—" : String(s.value)}</p>
             </div>
           ))}
         </div>
         {snapshot?.recommended_next_action ? (
-          <div className="mt-4 rounded-lg border border-indigo-400/20 bg-indigo-500/[0.06] px-3 py-2 text-xs text-indigo-200">
+          <div className="mt-4 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-foreground">
             Recommended next action: {String(snapshot.recommended_next_action)}
           </div>
         ) : null}
@@ -98,7 +98,7 @@ export default function IntelligencePage() {
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">Best Performing Domains</h3>
+          <h3 className="text-sm font-semibold text-foreground">Best Performing Domains</h3>
         </div>
         {jobs === null ? (
           <div className="space-y-3 p-5">
@@ -125,21 +125,21 @@ export default function IntelligencePage() {
             </thead>
             <tbody>
               {topDomains.map((d) => (
-                <tr key={d.domain} className="hover:bg-white/[0.02]">
+                <tr key={d.domain} className="hover:bg-surface-2">
                   <Td>
-                    <span className="flex items-center gap-2 text-sm font-medium text-white">
-                      <Globe2 className="h-4 w-4 text-indigo-300" /> {d.domain}
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Globe2 className="h-4 w-4 text-muted" /> {d.domain}
                     </span>
                   </Td>
-                  <Td className="text-sm text-slate-300">{d.submitted}</Td>
-                  <Td className="text-sm text-slate-300">{d.indexed}</Td>
+                  <Td className="text-sm text-foreground">{d.submitted}</Td>
+                  <Td className="text-sm text-foreground">{d.indexed}</Td>
                   <Td>
                     <div className="flex items-center gap-2">
                       <ProgressBar value={d.successRate} tone={d.successRate >= 50 ? "success" : d.successRate >= 25 ? "warning" : "danger"} className="w-24" />
-                      <span className="text-xs text-slate-400">{d.successRate}%</span>
+                      <span className="text-xs text-muted">{d.successRate}%</span>
                     </div>
                   </Td>
-                  <Td className="text-sm text-slate-300">{d.avgQuality}</Td>
+                  <Td className="text-sm text-foreground">{d.avgQuality}</Td>
                 </tr>
               ))}
             </tbody>
@@ -147,9 +147,9 @@ export default function IntelligencePage() {
         )}
       </Card>
 
-      <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-        <Clock className="h-4 w-4 shrink-0 text-indigo-300" />
-        <p className="text-xs leading-5 text-slate-500">
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3">
+        <Clock className="h-4 w-4 shrink-0 text-muted" />
+        <p className="text-xs leading-5 text-muted">
           Average indexing time and historical trends are only computed from verified evidence —
           never estimated to make the numbers look better.
         </p>

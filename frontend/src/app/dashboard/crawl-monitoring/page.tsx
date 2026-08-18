@@ -12,6 +12,7 @@ import {
   Td,
   Pill,
   PipelinePill,
+  PageError,
 } from "@/components/ui";
 import { listJobs, EngineJob } from '@/lib/dashboard';
 
@@ -25,11 +26,17 @@ function HttpPill({ status }: { status?: number | null }) {
 
 export default function CrawlMonitoringPage() {
   const [jobs, setJobs] = useState<EngineJob[] | null>(null);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     const res = await listJobs({ limit: 50 });
-    if (res.ok) setJobs(res.data.items);
-    else setJobs([]);
+    if (res.ok) {
+      setJobs(res.data.items);
+      setError("");
+    } else {
+      setJobs([]);
+      setError(res.status === 401 ? "Authentication required." : res.error || "Failed to load crawl evidence.");
+    }
   }, []);
 
   useEffect(() => {
@@ -42,6 +49,7 @@ export default function CrawlMonitoringPage() {
 
   return (
     <div className="space-y-6">
+      {error ? <PageError message={error} onRetry={() => void load()} /> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="URLs Crawled" value={jobs === null ? "—" : crawled.length} icon={<Globe2 className="h-4 w-4" />} tone="info" loading={jobs === null} />
         <StatCard label="Blocked / Noindex" value={jobs === null ? "—" : blocked.length} icon={<ShieldAlert className="h-4 w-4" />} tone="danger" loading={jobs === null} />
@@ -50,8 +58,8 @@ export default function CrawlMonitoringPage() {
       </div>
 
       <Card className="p-5">
-        <h3 className="mb-1 text-sm font-semibold text-white">How crawl evidence is collected</h3>
-        <p className="text-xs leading-6 text-slate-500">
+        <h3 className="mb-1 text-sm font-semibold text-foreground">How crawl evidence is collected</h3>
+        <p className="text-xs leading-6 text-muted">
           The engine crawls with its own user-agent and records HTTP status, robots.txt verdicts,
           canonical status, redirect chains, and crawlability — never impersonating Googlebot.
         </p>
@@ -59,7 +67,7 @@ export default function CrawlMonitoringPage() {
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-white">Crawl Evidence</h3>
+          <h3 className="text-sm font-semibold text-foreground">Crawl Evidence</h3>
         </div>
         {jobs === null ? (
           <div className="space-y-3 p-5">
@@ -88,29 +96,29 @@ export default function CrawlMonitoringPage() {
             </thead>
             <tbody>
               {jobs.map((j) => (
-                <tr key={j.id} className="hover:bg-white/[0.02]">
+                <tr key={j.id} className="hover:bg-surface-2">
                   <Td className="max-w-[240px]">
-                    <p className="truncate text-sm font-medium text-white">{j.source_url}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{j.source_url}</p>
                   </Td>
                   <Td><PipelinePill status={j.pipeline_status} /></Td>
                   <Td><HttpPill status={j.http_status} /></Td>
                   <Td>
                     {j.crawlability_score == null ? (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-muted">—</span>
                     ) : (
-                      <span className="text-sm text-slate-200">
+                      <span className="text-sm text-foreground">
                         {j.crawlability_score}
-                        <span className="ml-1.5 text-xs text-slate-500">{j.crawlability_band || ""}</span>
+                        <span className="ml-1.5 text-xs text-muted">{j.crawlability_band || ""}</span>
                       </span>
                     )}
                   </Td>
-                  <Td className="text-xs text-slate-400">{j.canonical_status || "—"}</Td>
+                  <Td className="text-xs text-muted">{j.canonical_status || "—"}</Td>
                   <Td>
                     <Pill tone={j.googlebot_visited ? "success" : "neutral"}>
                       {j.googlebot_visited ? "Yes" : "No / Unknown"}
                     </Pill>
                   </Td>
-                  <Td className="text-xs text-slate-500">
+                  <Td className="text-xs text-muted">
                     {j.last_checked_at ? new Date(j.last_checked_at).toLocaleString() : "—"}
                   </Td>
                 </tr>

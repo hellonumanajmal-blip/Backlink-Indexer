@@ -1,23 +1,14 @@
 import type { MetadataRoute } from "next";
-
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://pintdown.site";
+import { SITE_URL } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
       userAgent: "*",
-      allow: [
-        "/featured",
-        "/discover",
-        "/feed.xml",
-        "/feed.atom",
-        "/feed.json",
-        "/rss.xml",
-        "/atom.xml",
-        "/sitemap.xml",
-      ],
-      disallow: ["/internal/", "/dashboard/", "/login", "/signup"],
+      allow: "/",
+      disallow: ["/internal/", "/dashboard/", "/api/", "/login", "/signup"],
     },
-    sitemap: `${SITE}/sitemap.xml`,
+    sitemap: `${SITE_URL}/sitemap.xml`,
+    host: SITE_URL,
   };
 }

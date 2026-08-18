@@ -32,7 +32,7 @@ export function Button({
 }) {
   const variants: Record<ButtonVariant, string> = {
     primary:
-      "bg-primary text-white hover:bg-primary-strong shadow-[0_8px_24px_-8px_color-mix(in_srgb,var(--primary)_60%,transparent)]",
+      "bg-primary text-white hover:bg-primary-strong",
     secondary: "bg-surface-2 text-foreground border border-border hover:bg-surface-3",
     ghost: "text-foreground hover:bg-surface-2",
     outline: "border border-border-strong text-foreground hover:border-primary hover:text-primary",
@@ -76,7 +76,7 @@ export function Card({
     <div
       id={id}
       className={cn(
-        "rounded-xl border border-border bg-surface/70 backdrop-blur-sm",
+        "rounded-lg border border-border bg-surface",
         className
       )}
     >
@@ -342,7 +342,7 @@ export function Input({
   return (
     <input
       className={cn(
-        "h-10 w-full rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+        "h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
         className
       )}
       {...props}
@@ -357,7 +357,7 @@ export function Textarea({
   return (
     <textarea
       className={cn(
-        "w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+        "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
         className
       )}
       {...props}
@@ -373,7 +373,7 @@ export function Select({
   return (
     <select
       className={cn(
-        "h-10 w-full rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+        "h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
         className
       )}
       {...props}
@@ -487,7 +487,7 @@ export function Drawer({
 
 export function TableWrap({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("overflow-x-auto rounded-xl border border-border bg-surface/70", className)}>
+    <div className={cn("overflow-x-auto rounded-lg border border-border bg-surface", className)}>
       <table className="w-full min-w-[720px] border-collapse text-left text-sm">{children}</table>
     </div>
   );
@@ -503,4 +503,26 @@ export function Th({ children, className = "" }: { children?: React.ReactNode; c
 
 export function Td({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
   return <td className={cn("border-b border-border px-4 py-3 align-middle", className)}>{children}</td>;
+}
+
+export function PageError({
+  title = "Could not load this page",
+  message,
+  onRetry,
+}: {
+  title?: string;
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-4">
+      <p className="text-sm font-semibold text-danger">{title}</p>
+      <p className="mt-1 text-sm text-danger/90">{message}</p>
+      {onRetry ? (
+        <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={onRetry}>
+          Retry
+        </Button>
+      ) : null}
+    </div>
+  );
 }
