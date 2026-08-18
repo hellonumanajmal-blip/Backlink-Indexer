@@ -210,6 +210,81 @@ class Settings(BaseSettings):
     @property
     def indexer_provider_order(self) -> List[str]:
         return _csv(self.indexer_provider_order_csv)
+    
+    @model_validator(mode="after")
+    def _validate_discovery_configuration(self) -> "Settings":
+        """Validate that discovery/verification configuration is not completely empty.
+        
+        If running in production without configuration, this will raise an error.
+        This prevents silent failures where the system appears to work but discovery fails.
+        """
+        if self.environment != "production":
+            return self
+        
+        # Check if ANY discovery mechanism is configured
+        has_discovery_config = (
+            bool(self.public_hub_url)  # Public hub for listing URLs
+            or bool(self.websub_feed_url)  # WebSub feed for pinging hub
+            or bool(self.indexnow_key)  # IndexNow for Bing
+            or bool(self.owned_sitemap_url)  # Owned sitemap for hints
+            or bool(self.indexer_provider_order_csv)  # Paid indexers
+        )
+        
+        if not has_discovery_config:
+            import warnings
+            warnings.warn(
+                "⚠️  PRODUCTION CONFIGURATION WARNING\n"
+                "All discovery mechanisms are unconfigured:\n"
+                "  - FI_PUBLIC_HUB_URL: empty (defaults to non-functional pintdown.site)\n"
+                "  - FI_WEBSUB_FEED_URL: empty (defaults to non-functional pintdown.site)\n"
+                "  - FI_INDEXNOW_KEY: empty\n"
+                "  - FI_OWNED_SITEMAP_URL: empty\n"
+                "  - FI_INDEXER_PROVIDER_ORDER: empty\n"
+                "\n"
+                "Third-party backlinks will attempt discovery but may fail due to:\n"
+                "1. No configured hub URL to list them on\n"
+                "2. No configured feed URL for WebSub\n"
+                "3. No verification strategy (GSC, CSE, Manual)\n"
+                "\n"
+                "TO FIX:\n"
+                "  1. Set FI_PUBLIC_HUB_URL to a domain you control\n"
+                "  2. Set FI_WEBSUB_FEED_URL to the feed URL\n"
+                "  3. Add FI_GSC_ACCESS_TOKEN for verification (if you own domains)\n"
+                "  4. Or disable discovery with FI_MAX_DISCOVERY_MODE=false\n"
+                "\nSee CONFIGURATION_GUIDE.md for step-by-step setup.",
+                category=RuntimeWarning,
+                stacklevel=2
+            )
+        
+        # Check if verification is configured for owned properties
+        has_verification_config = (
+            bool(self.gsc_access_token)  # Google Search Console
+            or bool(self.google_cse_api_key)  # Google Custom Search
+            or bool(self.google_indexing_client_email)  # Google Indexing API
+        )
+        
+        if not has_verification_config:
+            import warnings
+            warnings.warn(
+                "⚠️  PRODUCTION VERIFICATION WARNING\n"
+                "No verification configuration found:\n"
+                "  - FI_GSC_ACCESS_TOKEN: empty (Search Console disabled)\n"
+                "  - FI_GOOGLE_CSE_API_KEY: empty (Custom Search disabled)\n"
+                "  - FI_GOOGLE_INDEXING_CLIENT_EMAIL: empty (Indexing API disabled)\n"
+                "\n"
+                "URLs may reach 'WAITING_FOR_CRAWL' but never reach 'INDEXED'\n"
+                "because there's no way to verify Google actually indexed them.\n"
+                "\n"
+                "TO FIX:\n"
+                "  1. Add FI_GSC_ACCESS_TOKEN for Google Search Console verification\n"
+                "  2. Or add FI_GOOGLE_CSE_API_KEY for Custom Search fallback\n"
+                "  3. Or implement manual verification UI (mark URLs as indexed manually)\n"
+                "\nSee CONFIGURATION_GUIDE.md for setup instructions.",
+                category=RuntimeWarning,
+                stacklevel=2
+            )
+        
+        return self
 
 
 @lru_cache

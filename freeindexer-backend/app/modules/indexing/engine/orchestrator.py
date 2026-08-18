@@ -642,15 +642,30 @@ class IndexingEngine:
         job.quality_band = quality_band(quality.score)
         job.page_freshness = "fresh" if fresh else "old"
         spam = looks_like_spam(job.source_url)
-        listed = (
+        
+        # DISCOVERY ELIGIBILITY: Can this URL attempt discovery?
+        # Should be liberal - allow discovery even for low-quality/unfound backlinks.
+        # Quality is used only for UI ranking and internal prioritization, not pipeline blocking.
+        discovery_eligible = (
             (_max_discovery_enabled() or job.experiment_group != "A")
             and not project_is_private(job.project)
-            and spam is None
-            and not job.js_backlink_found
-            and (not job.target_url or job.backlink_found is True)
-            and quality.score >= 40
+            and spam is None  # Still block obvious spam
+            # Removed backlink_found gate - discovery should attempt regardless
+            # Removed quality >= 40 gate - quality affects UI, not discovery eligibility
         )
-        job.public_listed = listed
+        
+        # PUBLIC LISTING: Should this URL be promoted to public featured feed?
+        # More restrictive - only promote high-quality, verified backlinks.
+        # This affects UI ranking and feed inclusion priority, not discovery attempt.
+        public_listing_eligible = (
+            discovery_eligible
+            and (not job.target_url or job.backlink_found is True)  # Only promote if backlink found
+            and quality.score >= 40  # Only promote if high quality
+            and not job.js_backlink_found  # Don't promote JS backlinks
+        )
+        
+        job.discovery_eligible = discovery_eligible
+        job.public_listed = public_listing_eligible
         scored = compute_discovery_score(
             http_ok=job.http_status == 200,
             backlink_found=job.backlink_found,
@@ -956,13 +971,21 @@ class IndexingEngine:
         hub_url = settings.public_hub_url or "https://pintdown.site/featured"
         feed_url = settings.websub_feed_url or "https://pintdown.site/feed.xml"
         items = await list_feed_items(self.session, limit=200)
-        listed = bool(job.public_listed) or inventory_contains(items, job.source_url)
+        
+        # Check if URL is already in the feed inventory (from any job)
+        in_inventory = inventory_contains(items, job.source_url)
+        
+        # Generate RSS document regardless of public_listed status.
+        # Channels need this for their own decision-making.
+        # Previously, document was only generated if listed=True, which blocked
+        # low-quality URLs from discovery attempts. Now discovery can proceed.
         document = render_rss(
             items,
             home_url=hub_url,
             feed_url=feed_url,
             hub_url=(settings.websub_hub_urls[0] if settings.websub_hub_urls else "https://pubsubhubbub.appspot.com"),
         )
+        
         gsc_channel = None
         if getattr(settings, "gsc_submit_feed", False):
             gsc_channel = GscFeedSitemapChannel(
@@ -971,13 +994,17 @@ class IndexingEngine:
                 feed_url=feed_url,
                 enabled=True,
             )
+        
+        # Pass both flags to channels:
+        # - listed_on_hub: URL is marked for public promotion (high quality)
+        # - hub_document: The full feed (for channels to check their own logic)
         channels = build_free_channels(
             providers,
-            listed_on_hub=listed,
+            listed_on_hub=bool(job.public_listed),  # For PublicHubChannel.accept_if_published
             hub_url=hub_url,
             feed_url=feed_url,
             sitemap_url=settings.owned_sitemap_url,
-            hub_document=document if listed else "",
+            hub_document=document,  # Always pass document; channels decide usage
             gsc_feed_channel=gsc_channel,
         )
         wrapped = wrap_channels(channels)

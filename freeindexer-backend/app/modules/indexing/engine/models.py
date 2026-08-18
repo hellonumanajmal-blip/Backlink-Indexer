@@ -66,6 +66,9 @@ class IndexingJob(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin):
     priority_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     priority_band: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
     discovery_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    #: Can this URL attempt discovery (separate from public_listed which is for UI/promotion)?
+    discovery_eligible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    #: Should this URL be promoted to public featured feed (for UI ranking and promotion)?
     public_listed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     experiment_group: Mapped[Optional[str]] = mapped_column(String(8), nullable=True, index=True)
     experiment_assigned_at: Mapped[Optional[datetime]] = mapped_column(

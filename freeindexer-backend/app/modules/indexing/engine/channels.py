@@ -175,21 +175,17 @@ class WebSubChannel(DiscoveryChannel):
         self.feed_contains_url = feed_contains_url
 
     async def submit(self, url: str, *, property_type: PropertyType) -> ChannelOutcome:
-        if not self.feed_contains_url:
-            return ChannelOutcome(
-                channel=self.name,
-                status=ChannelResultStatus.WEBSUB_FAILED,
-                accepted=False,
-                error="Submitted URL is not present in the WebSub feed document",
-                evidence="WEBSUB_FAILED — refusing to ping a feed that does not list this URL",
-                quality_score=0.0,
-                payload={
-                    "channel": "WEBSUB",
-                    "submitted_url": url,
-                    "accepted": False,
-                    "submitted_at": _now(),
-                },
-            )
+        # FIXED: Previously blocked if URL not in feed. Now attempt regardless.
+        # The WebSub hub will decide whether to crawl based on its own logic.
+        # We don't pre-filter based on feed contents - we let the hub decide.
+        #
+        # The hub receives a ping with the feed URL and will decide:
+        # 1. Whether to crawl our feed
+        # 2. What URLs to discover from it
+        # 3. Whether to visit the target URLs
+        #
+        # We should attempt regardless of whether we know the URL is in our feed.
+        
         result = await self.provider.submit([url])
         outcome = _from_provider(self.name, result)
         feed_url = ""
