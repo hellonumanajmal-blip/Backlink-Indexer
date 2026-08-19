@@ -23,12 +23,13 @@ CALENDAR_DAYS = (1, 3, 7, 14)
 # Empirical verification checkpoints from experiment_started_at (not discovery spam).
 VERIFY_OFFSETS = (
     (0, "T+0"),
+    (15 * 60, "T+15m"),
+    (3600, "T+1h"),
+    (3 * 3600, "T+3h"),
     (6 * 3600, "T+6h"),
+    (12 * 3600, "T+12h"),
     (24 * 3600, "T+24h"),
     (48 * 3600, "T+48h"),
-    (72 * 3600, "T+72h"),
-    (7 * 86400, "T+7d"),
-    (14 * 86400, "T+14d"),
 )
 
 
@@ -119,7 +120,14 @@ def retry_action_for_job(job, *, now: Optional[datetime] = None) -> ScheduleActi
 
 
 def experiment_verify_action(job, *, now: Optional[datetime] = None) -> ScheduleAction:
-    """Next T+6h / 24h / 48h / 72h / 7d / 14d verification. Never hourly spam."""
+    """Next T+15m / 1h / 3h / 6h / 12h / 24h / 48h verification.
+
+    Each checkpoint is verified exactly once. If a checkpoint was missed
+    (e.g. the service was down or a job was created before the fast cadence
+    existed), the scheduler catches up by verifying the highest checkpoint
+    already reached in time — never re-verifying past checkpoints and never
+    spamming (one verification per checkpoint).
+    """
     now = now or datetime.now(timezone.utc)
     start = _aware(getattr(job, "experiment_started_at", None) or getattr(job, "submitted_at") or now)
     elapsed = (now - start).total_seconds()
@@ -129,8 +137,23 @@ def experiment_verify_action(job, *, now: Optional[datetime] = None) -> Schedule
         idx = names.index(current)
     except ValueError:
         idx = 0
-    if elapsed >= 14 * 86400 or current == "T+14d":
-        return ScheduleAction("T+14d", "final", None, "14-day experiment window complete")
+    if elapsed >= 14 * 86400:
+        return ScheduleAction("T+48h", "final", None, "14-day experiment window complete")
+    reached = idx
+    for i, (offset, _name) in enumerate(VERIFY_OFFSETS):
+        if offset <= elapsed:
+            reached = max(reached, i)
+    if reached > idx:
+        name = VERIFY_OFFSETS[reached][1]
+        nxt_after = None
+        if reached + 1 < len(VERIFY_OFFSETS):
+            nxt_after = start + timedelta(seconds=VERIFY_OFFSETS[reached + 1][0])
+        return ScheduleAction(
+            name,
+            "verify",
+            nxt_after,
+            f"catch-up {name} verification (checkpoint was {current})",
+        )
     nxt_idx = min(idx + 1, len(VERIFY_OFFSETS) - 1)
     offset, name = VERIFY_OFFSETS[nxt_idx]
     due_at = start + timedelta(seconds=offset)
@@ -138,7 +161,7 @@ def experiment_verify_action(job, *, now: Optional[datetime] = None) -> Schedule
         nxt_after = None
         if nxt_idx + 1 < len(VERIFY_OFFSETS):
             nxt_after = start + timedelta(seconds=VERIFY_OFFSETS[nxt_idx + 1][0])
-        action = "final" if name == "T+14d" else "verify"
+        action = "final" if name == "T+48h" else "verify"
         return ScheduleAction(name, action, nxt_after, f"due {name} verification")
     return ScheduleAction(
         current,

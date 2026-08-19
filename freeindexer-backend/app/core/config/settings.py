@@ -109,6 +109,17 @@ class Settings(BaseSettings):
     gsc_submit_feed: bool = Field(default=False, validation_alias="FI_GSC_SUBMIT_FEED")
     #: Crawlable hub that lists submitted URLs (featured page or RSS).
     public_hub_url: str = Field(default="", validation_alias="FI_PUBLIC_HUB_URL")
+    #: Origin used for canonical URLs, sitemap.xml and robots.txt. When empty it
+    #: is derived from the origin of FI_PUBLIC_HUB_URL, then pintdown.site.
+    public_base_url: str = Field(default="", validation_alias="FI_PUBLIC_BASE_URL")
+    #: Record inbound requests to the public discovery pages (UA, IP hash,
+    #: status) and use verified crawler evidence in verification.
+    crawler_evidence_enabled: bool = True
+    #: Salt for hashing client IPs in the access log. Derived from secret_key.
+    public_access_log_salt: str = Field(default="", validation_alias="FI_PUBLIC_ACCESS_LOG_SALT")
+    #: Reverse/forward DNS verification for Googlebot (Google's documented
+    #: method). Disable only in test/dev environments.
+    googlebot_dns_verify: bool = True
     #: Owned-domain sitemap URL. Third-party backlinks are never placed here.
     owned_sitemap_url: str = Field(default="", validation_alias="FI_OWNED_SITEMAP_URL")
     #: Google Search Console URL Inspection (owned properties only).
@@ -206,6 +217,27 @@ class Settings(BaseSettings):
     @property
     def websub_hub_urls(self) -> List[str]:
         return _csv(self.websub_hub_urls_csv)
+
+    @property
+    def public_base(self) -> str:
+        """Origin for canonical/sitemap/robots URLs — never third-party targets."""
+        if self.public_base_url:
+            return self.public_base_url.rstrip("/")
+        hub = self.public_hub_url or ""
+        if hub:
+            try:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(hub)
+                if parsed.scheme and parsed.netloc:
+                    return f"{parsed.scheme}://{parsed.netloc}"
+            except Exception:
+                pass
+        return "https://pintdown.site"
+
+    @property
+    def access_log_salt(self) -> str:
+        return self.public_access_log_salt or self.secret_key
 
     @property
     def indexer_provider_order(self) -> List[str]:

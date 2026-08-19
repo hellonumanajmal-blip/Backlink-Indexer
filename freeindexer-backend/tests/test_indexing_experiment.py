@@ -207,14 +207,67 @@ def test_experiment_verify_schedule_is_not_hourly():
         attempt_count=1,
         submitted_at=start,
     )
-    waiting = experiment_verify_action(job, now=start + timedelta(hours=1))
+    waiting = experiment_verify_action(job, now=start + timedelta(minutes=1))
     assert waiting.action == "wait"
-    due = experiment_verify_action(job, now=start + timedelta(hours=6, minutes=1))
-    assert due.name == "T+6h"
-    assert due.action == "verify"
-    job.experiment_checkpoint = "T+7d"
-    final = experiment_verify_action(job, now=start + timedelta(days=14))
-    assert final.action == "final"
+    assert waiting.next_at == start + timedelta(minutes=15)
+    due_15m = experiment_verify_action(job, now=start + timedelta(minutes=15, seconds=1))
+    assert due_15m.name == "T+15m"
+    assert due_15m.action == "verify"
+    job.experiment_checkpoint = "T+15m"
+    due_1h = experiment_verify_action(job, now=start + timedelta(hours=1, minutes=1))
+    assert due_1h.name == "T+1h"
+    assert due_1h.action == "verify"
+    assert due_1h.next_at == start + timedelta(hours=3)
+    job.experiment_checkpoint = "T+1h"
+    due_3h = experiment_verify_action(job, now=start + timedelta(hours=3, minutes=1))
+    assert due_3h.name == "T+3h"
+    job.experiment_checkpoint = "T+3h"
+    due_6h = experiment_verify_action(job, now=start + timedelta(hours=6, minutes=1))
+    assert due_6h.name == "T+6h"
+    assert due_6h.action == "verify"
+    job.experiment_checkpoint = "T+6h"
+    due_12h = experiment_verify_action(job, now=start + timedelta(hours=12, minutes=1))
+    assert due_12h.name == "T+12h"
+    job.experiment_checkpoint = "T+12h"
+    due_24h = experiment_verify_action(job, now=start + timedelta(hours=24, minutes=1))
+    assert due_24h.name == "T+24h"
+    job.experiment_checkpoint = "T+24h"
+    due_48h = experiment_verify_action(job, now=start + timedelta(hours=48, minutes=1))
+    assert due_48h.name == "T+48h"
+    assert due_48h.action == "verify"
+    assert due_48h.next_at is None
+
+
+def test_experiment_verify_catches_up_to_highest_reached_checkpoint():
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    job = SimpleNamespace(
+        experiment_started_at=start,
+        experiment_checkpoint="T+0",
+        discovery_status="DISCOVERY_PUBLISHED",
+        pipeline_status=PipelineStatus.RETRY_PENDING.value,
+        attempt_count=1,
+        submitted_at=start,
+    )
+    # Service was down through T+15m and T+1h — verify once at the highest
+    # checkpoint already reached in time, then schedule the next one.
+    caught_up = experiment_verify_action(job, now=start + timedelta(hours=1, minutes=1))
+    assert caught_up.name == "T+1h"
+    assert caught_up.action == "verify"
+    assert caught_up.next_at == start + timedelta(hours=3)
+    # Existing job created before the fast cadence: T+6h is the highest
+    # reached checkpoint.
+    job2 = SimpleNamespace(
+        experiment_started_at=start,
+        experiment_checkpoint="T+0",
+        discovery_status="DISCOVERY_PUBLISHED",
+        pipeline_status=PipelineStatus.RETRY_PENDING.value,
+        attempt_count=1,
+        submitted_at=start,
+    )
+    legacy = experiment_verify_action(job2, now=start + timedelta(hours=6, minutes=1))
+    assert legacy.name == "T+6h"
+    assert legacy.action == "verify"
+    assert legacy.next_at == start + timedelta(hours=12)
 
 
 @pytest.mark.anyio

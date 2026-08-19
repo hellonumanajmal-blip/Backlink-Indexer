@@ -13,6 +13,8 @@ os.environ.setdefault("FI_ENVIRONMENT", "development")
 os.environ.setdefault("FI_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("FI_SECRET_KEY", "test-secret-key-0123456789abcdef")
 os.environ["FI_MAX_DISCOVERY_MODE"] = "false"
+# Middleware is off by default; tests that exercise it enable it explicitly.
+os.environ["FI_CRAWLER_EVIDENCE_ENABLED"] = "false"
 
 from app.auth import create_access_token  # noqa: E402
 from app.database import get_db  # noqa: E402

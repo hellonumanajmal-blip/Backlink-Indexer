@@ -191,7 +191,7 @@ def render_hub_html(
     rows = list(items)
     lis = []
     for item in rows:
-        detail = f"/discover/{escape(item.url_hash)}" if item.url_hash else ""
+        detail = f"url/{escape(item.url_hash)}" if item.url_hash else ""
         listing = (
             f' <a href="{detail}">listing</a>'
             if detail
@@ -210,15 +210,50 @@ def render_hub_html(
   <title>{escape(title)}</title>
   <link rel="canonical" href="{escape(canonical)}"/>
   <meta name="robots" content="index,follow"/>
-  <link rel="alternate" type="application/rss+xml" href="/feed.xml"/>
-  <link rel="alternate" type="application/atom+xml" href="/feed.atom"/>
-  <link rel="alternate" type="application/feed+json" href="/feed.json"/>
+  <link rel="alternate" type="application/rss+xml" href="feed.xml"/>
+  <link rel="alternate" type="application/atom+xml" href="feed.atom"/>
+  <link rel="alternate" type="application/feed+json" href="feed.json"/>
 </head>
 <body>
   <h1>{escape(title)}</h1>
   <p>These are outbound mentions we host so crawlers can discover third-party URLs.
   Listing a URL here is not proof that Google crawled or indexed it.</p>
-  <p><a href="/discover">Public discovery index</a> · <a href="/featured">Featured</a> · <a href="/feed.xml">RSS</a> · <a href="/rss.xml">RSS alias</a> · <a href="/atom.xml">Atom</a> · <a href="/feed.json">JSON</a></p>
+  <p><a href="index">Public discovery index</a> · <a href="feed.xml">RSS</a> · <a href="feed.atom">Atom</a> · <a href="feed.json">JSON</a></p>
+  <ul>
+  {body}
+  </ul>
+</body>
+</html>
+"""
+
+
+def render_index_html(
+    items: Iterable[FeedItem],
+    *,
+    title: str = "PintDown public discovery index",
+    canonical: str = "https://pintdown.site/index",
+) -> str:
+    rows = list(items)
+    lis = []
+    for item in rows:
+        detail = f"url/{escape(item.url_hash)}" if item.url_hash else ""
+        lis.append(
+            f'<li><a href="{detail}">{escape(item.title or item.url)}</a>'
+            f"<p>{escape(item.summary or '')}</p></li>"
+        )
+    body = "\n".join(lis) or "<li>No discovery URLs published yet.</li>"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>{escape(title)}</title>
+  <link rel="canonical" href="{escape(canonical)}"/>
+  <meta name="robots" content="index,follow"/>
+</head>
+<body>
+  <h1>{escape(title)}</h1>
+  <p>Every URL in the public discovery inventory, with a stable per-URL page.</p>
+  <p><a href="hub">Discovery hub</a> · <a href="feed.xml">RSS</a> · <a href="feed.atom">Atom</a> · <a href="feed.json">JSON</a></p>
   <ul>
   {body}
   </ul>
@@ -233,6 +268,7 @@ __all__ = [
     "inventory_contains",
     "render_atom",
     "render_hub_html",
+    "render_index_html",
     "render_json_feed",
     "render_rss",
     "url_in_document",

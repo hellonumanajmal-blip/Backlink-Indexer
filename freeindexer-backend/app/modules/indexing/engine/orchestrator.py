@@ -95,6 +95,7 @@ from app.modules.indexing.engine.states import (
 )
 from app.modules.indexing.engine.url_validator import validate_url
 from app.modules.indexing.engine.verification import (
+    CrawlerEvidenceStrategy,
     CustomSearchStrategy,
     IndexVerificationService,
     ManualVerificationStrategy,
@@ -715,6 +716,9 @@ class IndexingEngine:
                 evidence=f"T+0 baseline. {result.evidence}",
                 checked_at=result.checked_at,
                 details={**(result.details or {}), "checkpoint": "T+0", "baseline": True},
+                crawler_user_agent=result.crawler_user_agent,
+                requested_url=result.requested_url,
+                verification_source=result.verification_source,
             ),
         )
         job.baseline_snapshot = {
@@ -875,6 +879,9 @@ class IndexingEngine:
                 evidence=result.evidence,
                 checked_at=result.checked_at,
                 details=result.details,
+                crawler_user_agent=result.crawler_user_agent,
+                requested_url=result.requested_url,
+                verification_source=result.verification_source,
             ),
         )
         job.verification_status = result.status
@@ -885,24 +892,37 @@ class IndexingEngine:
             job.googlebot_visited = True
             job.crawl_detected_at = job.crawl_detected_at or result.checked_at
             evidence_type = CrawlEvidenceType.SEARCH_CONSOLE.value
+            crawler_identity = "googlebot"
             if result.method == "google_custom_search":
                 evidence_type = CrawlEvidenceType.SEARCH_RESULT.value
             elif result.method == "manual":
                 evidence_type = CrawlEvidenceType.MANUAL.value
+            elif result.method == "crawler_evidence":
+                evidence_type = CrawlEvidenceType.CRAWLER_EVIDENCE.value
+                crawler_identity = "googlebot_verified"
             await add_crawl_evidence(
                 self.session,
                 CrawlEvidence(
                     tenant_id=job.tenant_id,
                     job_id=job.id,
                     url=job.source_url,
-                    crawler_identity="googlebot" if result.method == "google_search_console" else result.method,
-                    user_agent=None,
+                    crawler_identity=crawler_identity
+                    if result.method == "crawler_evidence"
+                    else (
+                        "googlebot"
+                        if result.method == "google_search_console"
+                        else result.method
+                    ),
+                    user_agent=result.crawler_user_agent,
                     source=result.method,
                     status_code=None,
                     observed_at=result.checked_at,
                     evidence_type=evidence_type,
                     confidence=result.confidence,
-                    details={"evidence": result.evidence},
+                    details={
+                        "evidence": result.evidence,
+                        **(result.details or {}),
+                    },
                 ),
             )
             if job.visibility_status in {
@@ -955,6 +975,12 @@ class IndexingEngine:
             return
         if result.status == VisibilityStatus.CRAWLED.value:
             job.visibility_status = VisibilityStatus.CRAWLED.value
+            if result.method == "crawler_evidence":
+                # Crawled ≠ indexed: keep retrying the verification checkpoints.
+                await self._retry_or_fail(
+                    job, PipelineStatus.NOT_INDEXED, result.evidence, prefer_retry=True
+                )
+                return
         await self._retry_or_fail(
             job,
             PipelineStatus.VERIFICATION_FAILED
@@ -1250,8 +1276,10 @@ def _owned_target_url() -> str:
 
 def _feed_inventory_cards(job: IndexingJob) -> dict:
     evidence = (
-        f"Listed on /featured, /discover, /discover/{job.source_url_hash}, "
-        "/feed.xml, /rss.xml, /atom.xml, /feed.json. Not indexed."
+        f"Listed on {settings.api_v1_prefix}/public/featured, "
+        f"{settings.api_v1_prefix}/public/index, "
+        f"{settings.api_v1_prefix}/public/url/{job.source_url_hash}, "
+        "feed.xml, feed.atom, feed.json. Not indexed."
     )
     card = {
         "status": "DISCOVERY_PUBLISHED",
@@ -1266,7 +1294,7 @@ def _feed_inventory_cards(job: IndexingJob) -> dict:
         "html_discovery": {
             **card,
             "channel": "html_discovery",
-            "evidence": f"/discover/{job.source_url_hash}",
+            "evidence": f"{settings.api_v1_prefix}/public/url/{job.source_url_hash}",
         },
     }
 
@@ -1279,6 +1307,7 @@ def default_verifier() -> IndexVerificationService:
                 access_token=settings.gsc_access_token, site_url=settings.gsc_site_url
             )
         )
+    strategies.append(CrawlerEvidenceStrategy())
     if settings.google_cse_api_key and settings.google_cse_cx:
         strategies.append(
             CustomSearchStrategy(

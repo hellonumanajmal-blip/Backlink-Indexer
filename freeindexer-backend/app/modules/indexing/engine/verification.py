@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import quote
 
+from sqlalchemy import select
+
+from app.core.config import settings
 from app.modules.indexing.engine.states import PropertyType, VisibilityStatus
 from app.modules.indexing.providers import post_json
 
@@ -35,6 +38,10 @@ class VerificationResult:
     evidence: str
     googlebot_visited: bool = False
     details: Dict[str, Any] = field(default_factory=dict)
+    #: Crawler-evidence metadata persisted on the VerificationAttempt row.
+    crawler_user_agent: Optional[str] = None
+    requested_url: Optional[str] = None
+    verification_source: Optional[str] = None
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -282,6 +289,77 @@ class CustomSearchStrategy(VerificationStrategy):
                 "Custom Search returned no hit. This is NOT proof of absence — "
                 "CSE coverage is incomplete, so status stays UNKNOWN."
             ),
+        )
+
+
+class CrawlerEvidenceStrategy(VerificationStrategy):
+    """Inbound-access evidence: verified Googlebot fetched our discovery page.
+
+    Reads the ``discovery_access_logs`` table written by
+    ``CrawlerEvidenceMiddleware``. Only rows whose ``verified_googlebot`` is
+    true (reverse + forward DNS matched, per Google's documented method) count.
+    Evidence is CRAWLED at best — a fetch is not an index. Never INDEXED.
+    """
+
+    name = "crawler_evidence"
+
+    def __init__(self, session_factory=None) -> None:
+        from app.database import AsyncSessionLocal
+
+        self._session_factory = session_factory or AsyncSessionLocal
+
+    async def verify(
+        self, url: str, *, property_type: PropertyType
+    ) -> Optional[VerificationResult]:
+        from app.modules.indexing.engine.models import DiscoveryAccessLog
+        from app.modules.indexing.indexer_dispatch import normalise_url, url_fingerprint
+
+        if not settings.crawler_evidence_enabled:
+            return None
+        normalised = normalise_url(url) or (url or "").strip()
+        fingerprint = url_fingerprint(normalised)
+        try:
+            async with self._session_factory() as session:
+                row = (
+                    await session.execute(
+                        select(DiscoveryAccessLog)
+                        .where(
+                            DiscoveryAccessLog.url_hash == fingerprint,
+                            DiscoveryAccessLog.verified_googlebot.is_(True),
+                        )
+                        .order_by(DiscoveryAccessLog.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+        except Exception:
+            # Failing open: evidence lookup must never break verification.
+            return None
+        if row is None:
+            return None
+        now = datetime.now(timezone.utc)
+        hostname = row.googlebot_hostname or "unknown"
+        return VerificationResult(
+            status=VisibilityStatus.CRAWLED.value,
+            confidence=0.85,
+            checked_at=now,
+            method=self.name,
+            evidence=(
+                f"Verified Googlebot (PTR + forward DNS hostname={hostname}) fetched "
+                f"our discovery page ({row.requested_url}) at {row.created_at.isoformat()}. "
+                "CRAWL evidence only — NOT indexed."
+            ),
+            googlebot_visited=True,
+            crawler_user_agent=row.user_agent,
+            requested_url=row.requested_url,
+            verification_source=row.verification_source,
+            details={
+                "access_log_id": str(row.id),
+                "user_agent": row.user_agent,
+                "googlebot_hostname": hostname,
+                "verification_source": row.verification_source,
+                "requested_path": row.requested_path,
+                "status_code": row.status_code,
+            },
         )
 
 

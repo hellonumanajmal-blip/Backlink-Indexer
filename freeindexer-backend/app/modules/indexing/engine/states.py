@@ -96,6 +96,8 @@ class CrawlEvidenceType(str, Enum):
     SEARCH_CONSOLE = "SEARCH_CONSOLE"
     SEARCH_RESULT = "SEARCH_RESULT"
     MANUAL = "MANUAL"
+    #: Googlebot (PTR + forward DNS verified) fetched one of our public pages.
+    CRAWLER_EVIDENCE = "CRAWLER_EVIDENCE"
 
 
 #: Signal quality of a discovery channel (0–1). Not "probability Google indexed".

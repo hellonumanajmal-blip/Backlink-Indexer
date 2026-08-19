@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -257,6 +258,39 @@ class VerificationAttempt(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin
     evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     details: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    #: Crawler evidence details (populated by the crawler_evidence method).
+    crawler_user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    requested_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    verification_source: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+
+
+class DiscoveryAccessLog(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Inbound requests to our public discovery pages (crawler evidence).
+
+    ``ip_hash`` is a salted SHA-256 of the client IP — raw IPs are never
+    stored. ``verified_googlebot`` is only set after reverse DNS (PTR ends
+    with ``.googlebot.com``) AND forward DNS (A records match the IP) both
+    pass, per Google's documented verification method. No tenant scoping —
+    public pages are tenant-agnostic.
+    """
+
+    __tablename__ = "discovery_access_logs"
+    __table_args__ = (
+        Index("ix_discovery_access_logs_hash_verified", "url_hash", "verified_googlebot"),
+        Index("ix_discovery_access_logs_created_at", "created_at"),
+    )
+
+    url_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    requested_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    requested_path: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ua_class: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    ip_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    referer: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    verified_googlebot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    googlebot_hostname: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    verification_source: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
 
 class DomainProfile(Base, UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin):
@@ -283,5 +317,6 @@ __all__ = [
     "DiscoveryAttempt",
     "VerificationAttempt",
     "CrawlEvidence",
+    "DiscoveryAccessLog",
     "DomainProfile",
 ]

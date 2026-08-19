@@ -195,8 +195,9 @@ async def test_discover_html_is_crawlable_and_has_no_tenant(session):
     body = html.body.decode("utf-8")
     assert "index,follow" in body
     assert url in body
-    assert "/featured" in body
-    assert "/discover" in body
+    assert 'href="index"' in body
+    assert 'href="hub"' in body
+    assert "/discover" not in body
     assert TENANT not in body
     assert "Public mention on" in body
     assert "dev-tenant" not in body.lower()
