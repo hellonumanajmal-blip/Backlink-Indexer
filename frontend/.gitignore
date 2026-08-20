@@ -1,2 +1,8 @@
 .vercel
 .env*
+
+# Vercel CLI env/audit dumps — may contain OIDC tokens and secret values.
+vercel-audit-env.txt
+*-audit-env.txt
+vercel-env*.txt
+.vercel-env*
